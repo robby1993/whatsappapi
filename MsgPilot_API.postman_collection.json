@@ -2,13 +2,13 @@
 	"info": {
 		"_postman_id": "b1a2c3d4-e5f6-7890-abcd-1234567890ab",
 		"name": "MsgPilot WhatsApp API",
-		"description": "Complete API Collection for MsgPilot WhatsApp Automation Monorepo",
+		"description": "Complete & Updated Postman API Collection for MsgPilot WhatsApp Automation Backend",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
 		{
 			"key": "baseUrl",
-			"value": "http://localhost:5001",
+			"value": "http://localhost:5001/api",
 			"type": "string"
 		},
 		{
@@ -19,8 +19,22 @@
 	],
 	"item": [
 		{
-			"name": "1. Authentication & User",
+			"name": "1. Authentication & Users",
 			"item": [
+				{
+					"name": "Seed Default Admin Account",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/seed-admin",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "seed-admin"]
+						}
+					}
+				},
 				{
 					"name": "Register User",
 					"request": {
@@ -30,7 +44,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"number\": \"919876543210\",\n  \"password\": \"secret123\",\n  \"userType\": \"user\"\n}"
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"number\": \"919876543210\",\n  \"password\": \"secret123\",\n  \"userType\": \"user\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/users/register",
@@ -72,6 +86,77 @@
 					}
 				},
 				{
+					"name": "Get Active Subscription Plans",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/users/plans",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "plans"]
+						}
+					}
+				},
+				{
+					"name": "Buy / Renew Subscription Plan",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"planId\": \"pro-30\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/buy-subscription",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "buy-subscription"]
+						}
+					}
+				},
+				{
+					"name": "Create Razorpay Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"planId\": \"pro-30\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/create-razorpay-order",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "create-razorpay-order"]
+						}
+					}
+				},
+				{
+					"name": "Verify Razorpay Payment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"razorpayPaymentId\": \"pay_123456\",\n  \"razorpayOrderId\": \"order_123456\",\n  \"razorpaySignature\": \"abcdef123456\",\n  \"planId\": \"pro-30\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/verify-razorpay-payment",
+							"host": ["{{baseUrl}}"],
+							"path": ["users", "verify-razorpay-payment"]
+						}
+					}
+				},
+				{
 					"name": "Update Profile",
 					"request": {
 						"method": "POST",
@@ -89,31 +174,26 @@
 							"path": ["users", "update-profile"]
 						}
 					}
-				},
-				{
-					"name": "Buy Subscription Plan",
-					"request": {
-						"method": "POST",
-						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"planId\": 1\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/users/buy-subscription",
-							"host": ["{{baseUrl}}"],
-							"path": ["users", "buy-subscription"]
-						}
-					}
 				}
 			]
 		},
 		{
-			"name": "2. WhatsApp Gateway",
+			"name": "2. WhatsApp Gateway & Multi-Sessions",
 			"item": [
+				{
+					"name": "Get Connected WhatsApp Sessions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/whatsapp/user-sessions",
+							"host": ["{{baseUrl}}"],
+							"path": ["whatsapp", "user-sessions"]
+						}
+					}
+				},
 				{
 					"name": "Connect via Pairing Code",
 					"request": {
@@ -179,7 +259,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"phone\": \"919876543210\",\n  \"message\": \"Hello from MsgPilot WhatsApp API!\",\n  \"mediaUrl\": \"\",\n  \"mediaType\": \"\"\n}"
+							"raw": "{\n  \"from\": \"919876543210\",\n  \"phone\": \"919876543211\",\n  \"message\": \"Hello from MsgPilot WhatsApp API!\",\n  \"mediaUrl\": \"\",\n  \"mediaType\": \"\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/whatsapp/send-message",
@@ -189,7 +269,7 @@
 					}
 				},
 				{
-					"name": "Send Bulk Broadcast",
+					"name": "Send Mass Broadcast",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -198,7 +278,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"numbers\": [\"919876543210\", \"919876543211\"],\n  \"message\": \"Special announcement for all subscribers!\"\n}"
+							"raw": "{\n  \"from\": \"919876543210\",\n  \"numbers\": [\"919876543211\", \"919876543212\"],\n  \"message\": \"Special announcement for all subscribers!\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/whatsapp/broadcast",
@@ -208,7 +288,7 @@
 					}
 				},
 				{
-					"name": "Upload File Attachment",
+					"name": "Upload Media Attachment",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -249,10 +329,10 @@
 			]
 		},
 		{
-			"name": "3. Message Templates",
+			"name": "3. Schedule Message Queue",
 			"item": [
 				{
-					"name": "Create Template",
+					"name": "Schedule Future Message",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -261,73 +341,40 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"keyword\": \"welcome\",\n  \"response\": \"Welcome to our service!\",\n  \"type\": \"text\"\n}"
+							"raw": "{\n  \"from\": \"919876543210\",\n  \"phone\": \"919876543211\",\n  \"message\": \"Automated scheduled message from MsgPilot!\",\n  \"scheduleTime\": \"2026-12-25T10:00:00.000Z\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/templates",
+							"raw": "{{baseUrl}}/whatsapp/schedule-message",
 							"host": ["{{baseUrl}}"],
-							"path": ["templates"]
+							"path": ["whatsapp", "schedule-message"]
 						}
 					}
 				},
 				{
-					"name": "Get All Templates",
+					"name": "Get Scheduled Messages Queue",
 					"request": {
 						"method": "GET",
 						"header": [
 							{ "key": "Authorization", "value": "Bearer {{token}}" }
 						],
 						"url": {
-							"raw": "{{baseUrl}}/templates",
+							"raw": "{{baseUrl}}/whatsapp/scheduled-messages",
 							"host": ["{{baseUrl}}"],
-							"path": ["templates"]
+							"path": ["whatsapp", "scheduled-messages"]
 						}
 					}
 				},
 				{
-					"name": "Get Template by Keyword",
-					"request": {
-						"method": "GET",
-						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" }
-						],
-						"url": {
-							"raw": "{{baseUrl}}/templates/welcome",
-							"host": ["{{baseUrl}}"],
-							"path": ["templates", "welcome"]
-						}
-					}
-				},
-				{
-					"name": "Update Template",
-					"request": {
-						"method": "PUT",
-						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"response\": \"Updated welcome message content!\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/templates/welcome",
-							"host": ["{{baseUrl}}"],
-							"path": ["templates", "welcome"]
-						}
-					}
-				},
-				{
-					"name": "Delete Template",
+					"name": "Cancel Scheduled Message",
 					"request": {
 						"method": "DELETE",
 						"header": [
 							{ "key": "Authorization", "value": "Bearer {{token}}" }
 						],
 						"url": {
-							"raw": "{{baseUrl}}/templates/welcome",
+							"raw": "{{baseUrl}}/whatsapp/scheduled-messages/1",
 							"host": ["{{baseUrl}}"],
-							"path": ["templates", "welcome"]
+							"path": ["whatsapp", "scheduled-messages", "1"]
 						}
 					}
 				}
@@ -400,59 +447,7 @@
 			]
 		},
 		{
-			"name": "5. Marketing Campaigns",
-			"item": [
-				{
-					"name": "Create Scheduled Campaign",
-					"request": {
-						"method": "POST",
-						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"Holiday Sale\",\n  \"numbers\": [\"919876543210\", \"919876543211\"],\n  \"message\": \"Get 50% off today only!\",\n  \"scheduledTime\": \"2026-12-25T10:00:00.000Z\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/campaigns",
-							"host": ["{{baseUrl}}"],
-							"path": ["campaigns"]
-						}
-					}
-				},
-				{
-					"name": "Get All Campaigns",
-					"request": {
-						"method": "GET",
-						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" }
-						],
-						"url": {
-							"raw": "{{baseUrl}}/campaigns",
-							"host": ["{{baseUrl}}"],
-							"path": ["campaigns"]
-						}
-					}
-				},
-				{
-					"name": "Delete Campaign",
-					"request": {
-						"method": "DELETE",
-						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" }
-						],
-						"url": {
-							"raw": "{{baseUrl}}/campaigns/1",
-							"host": ["{{baseUrl}}"],
-							"path": ["campaigns", "1"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "6. Admin Management",
+			"name": "5. Admin Management",
 			"item": [
 				{
 					"name": "Get System Stats",
@@ -486,7 +481,21 @@
 					}
 				},
 				{
-					"name": "Save / Create Subscription Plan",
+					"name": "Get All Subscription Plans",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/plans",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "plans"]
+						}
+					}
+				},
+				{
+					"name": "Create / Save Subscription Plan",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -495,12 +504,54 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Pro Plan\",\n  \"price\": 499,\n  \"messageLimit\": 10000,\n  \"durationDays\": 30\n}"
+							"raw": "{\n  \"planId\": \"pro-30\",\n  \"name\": \"Pro Plan\",\n  \"price\": 599,\n  \"days\": 30\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/admin/plans",
 							"host": ["{{baseUrl}}"],
 							"path": ["admin", "plans"]
+						}
+					}
+				},
+				{
+					"name": "Delete Subscription Plan",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/plans/1",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "plans", "1"]
+						}
+					}
+				},
+				{
+					"name": "Get Subscription Purchase Audit History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/subscription-history",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "subscription-history"]
+						}
+					}
+				},
+				{
+					"name": "Download Database JSON Backup",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/backup-database",
+							"host": ["{{baseUrl}}"],
+							"path": ["admin", "backup-database"]
 						}
 					}
 				}
