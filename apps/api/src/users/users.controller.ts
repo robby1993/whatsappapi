@@ -38,10 +38,31 @@ export class UsersController {
     return { message: 'Profile updated successfully', result };
   }
 
+  @Get('plans')
+  @UseGuards(TokenAuthGuard)
+  async getPlans() {
+    const result = await this.usersService.getPlans();
+    return { message: 'Plans fetched', result };
+  }
+
   @Post('buy-subscription')
   @UseGuards(TokenAuthGuard)
-  async buySubscription(@Body('planId') planId: number, @Req() req: any) {
+  async buySubscription(@Body('planId') planId: any, @Req() req: any) {
     const result = await this.usersService.buySubscription(req.userNumber, req.userType, planId);
     return { message: 'Subscription purchased successfully', result };
+  }
+
+  @Post('create-razorpay-order')
+  @UseGuards(TokenAuthGuard)
+  async createRazorpayOrder(@Body('planId') planId: any, @Req() req: any) {
+    const result = await this.usersService.createRazorpayOrder(req.userNumber, req.userType, planId);
+    return { message: 'Razorpay order status fetched', result };
+  }
+
+  @Post('verify-razorpay-payment')
+  @UseGuards(TokenAuthGuard)
+  async verifyRazorpayPayment(@Body() body: any, @Req() req: any) {
+    const result = await this.usersService.verifyRazorpayPayment(req.userNumber, req.userType, body);
+    return { message: 'Payment verified and subscription activated', result };
   }
 }

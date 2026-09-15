@@ -10,6 +10,7 @@ import { Plan } from '../database/models/Plan';
 import { Stat } from '../database/models/Stat';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { QueuedMessage } from '../database/models/QueuedMessage';
+import { SubscriptionHistory } from '../database/models/SubscriptionHistory';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { QueuedMessage } from '../database/models/QueuedMessage';
       Stat,
       ScheduledMessage,
       QueuedMessage,
+      SubscriptionHistory,
     ]),
   ],
   providers: [AdminService],

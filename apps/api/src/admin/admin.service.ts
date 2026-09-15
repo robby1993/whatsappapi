@@ -8,6 +8,7 @@ import { Plan } from '../database/models/Plan';
 import { Stat } from '../database/models/Stat';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { QueuedMessage } from '../database/models/QueuedMessage';
+import { SubscriptionHistory } from '../database/models/SubscriptionHistory';
 import { Op } from 'sequelize';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class AdminService {
     @InjectModel(Stat) private statModel: typeof Stat,
     @InjectModel(ScheduledMessage) private scheduledMessageModel: typeof ScheduledMessage,
     @InjectModel(QueuedMessage) private queuedMessageModel: typeof QueuedMessage,
+    @InjectModel(SubscriptionHistory) private subscriptionHistoryModel: typeof SubscriptionHistory,
   ) {}
 
   async getStats() {
@@ -62,14 +64,33 @@ export class AdminService {
     return true;
   }
 
+  async getPlans() {
+    let plans = await this.planModel.findAll({ order: [['price', 'ASC']] });
+    if (plans.length === 0) {
+      await this.planModel.bulkCreate([
+        { planId: 'starter-30', name: 'Starter Plan', days: 30, price: 299 },
+        { planId: 'pro-30', name: 'Pro Business Plan', days: 30, price: 599 },
+        { planId: 'yearly-365', name: 'Enterprise Yearly', days: 365, price: 2999 },
+      ]);
+      plans = await this.planModel.findAll({ order: [['price', 'ASC']] });
+    }
+    return plans;
+  }
+
   async savePlan(data: any) {
-      const { planId } = data;
-      const existing = await this.planModel.findOne({ where: { planId } });
+      const { planId, name, days, price } = data;
+      const cleanPlanId = planId || name.toLowerCase().replace(/\s+/g, '-') + '-' + days;
+      const existing = await this.planModel.findOne({ where: { planId: cleanPlanId } });
       if (existing) {
-          return await existing.update(data);
+          return await existing.update({ name, days, price });
       } else {
-          return await this.planModel.create(data);
+          return await this.planModel.create({ planId: cleanPlanId, name, days, price });
       }
+  }
+
+  async deletePlan(id: number) {
+    await this.planModel.destroy({ where: { id } });
+    return true;
   }
 
   async clearDatabase() {
@@ -81,6 +102,12 @@ export class AdminService {
     await this.scheduledMessageModel.destroy({ where: {}, truncate: true });
     await this.queuedMessageModel.destroy({ where: {}, truncate: true });
     return true;
+  }
+
+  async getSubscriptionHistory() {
+    return await this.subscriptionHistoryModel.findAll({
+      order: [['createdAt', 'DESC']],
+    });
   }
 
   async backupDatabase() {

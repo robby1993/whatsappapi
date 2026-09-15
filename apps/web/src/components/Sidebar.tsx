@@ -10,7 +10,8 @@ import {
   Zap,
   ShieldCheck,
   Send,
-  Radio
+  Radio,
+  CreditCard
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
@@ -24,6 +25,7 @@ const Sidebar = () => {
     { name: 'Send Message', path: '/send-message', icon: Send },
     { name: 'Schedule Message', path: '/schedule-message', icon: Clock },
     { name: 'Broadcast', path: '/broadcast', icon: Radio },
+    { name: 'Subscription', path: '/subscription', icon: CreditCard },
   ];
 
   if (user?.userType === 'admin') {

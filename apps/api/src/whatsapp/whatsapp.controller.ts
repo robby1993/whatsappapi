@@ -53,6 +53,10 @@ export class WhatsappController {
 
   @Post('connect-pair')
   async connectPair(@Body('phone') phone: string, @Req() req: any) {
+    if (req.user?.isExpired) {
+      return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
+    }
+
     try {
       const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
       console.log(`📡 Requesting pairing code for: ${targetPhone}`);
@@ -83,6 +87,10 @@ export class WhatsappController {
 
   @Post('connect-qr')
   async connectQr(@Body('phone') phone: string, @Req() req: any) {
+    if (req.user?.isExpired) {
+      return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
+    }
+
     const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
     await this.whatsappService.forceLogout(targetPhone);
     await this.whatsappService.initWhatsApp(targetPhone);
@@ -159,6 +167,10 @@ export class WhatsappController {
 
   @Post('send-message')
   async sendMessage(@Body() body: { phone: string; message: string; from?: string; mediaUrl?: string; mediaType?: string }, @Req() req: any) {
+    if (req.user?.isExpired) {
+      return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
+    }
+
     const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
     const sock = this.whatsappService.sessions.get(sender);
 
@@ -200,6 +212,10 @@ export class WhatsappController {
 
   @Post('broadcast')
   async broadcast(@Body() body: { numbers: string[]; message: string; from?: string; mediaUrl?: string; mediaType?: string }, @Req() req: any) {
+    if (req.user?.isExpired) {
+      return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
+    }
+
     const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
     try {
       const results = await this.whatsappService.broadcast(
@@ -226,6 +242,10 @@ export class WhatsappController {
 
   @Post('schedule-message')
   async scheduleMessage(@Body() body: { phone: string; message: string; scheduleTime: string | number; from?: string; mediaUrl?: string; mediaType?: string }, @Req() req: any) {
+    if (req.user?.isExpired) {
+      return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
+    }
+
     const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
     const cleanReceiver = body.phone.replace(/\D/g, '');
 

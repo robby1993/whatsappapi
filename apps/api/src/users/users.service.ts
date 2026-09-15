@@ -1,12 +1,14 @@
 import { Injectable, ConflictException, NotFoundException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import * as crypto from 'crypto';
+import axios from 'axios';
 import { User } from '../database/models/User';
 import { Token } from '../database/models/Token';
 import { Plan } from '../database/models/Plan';
 import { Stat } from '../database/models/Stat';
 import { MessageLog } from '../database/models/MessageLog';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
+import { SubscriptionHistory } from '../database/models/SubscriptionHistory';
 
 @Injectable()
 export class UsersService {
@@ -23,6 +25,8 @@ export class UsersService {
     private messageLogModel: typeof MessageLog,
     @InjectModel(ScheduledMessage)
     private scheduledMessageModel: typeof ScheduledMessage,
+    @InjectModel(SubscriptionHistory)
+    private subscriptionHistoryModel: typeof SubscriptionHistory,
   ) {}
 
   async seedAdmin() {
@@ -108,7 +112,14 @@ export class UsersService {
         // Automatically activate admin accounts upon valid login
         await user.update({ isActive: true });
       } else {
-        throw new ForbiddenException('Account is currently inactive');
+        const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
+        const expiryTime = createdAtTime + (user.validDays * 86400000);
+        const isExpired = Date.now() > expiryTime || user.validDays <= 0;
+
+        if (!isExpired) {
+          throw new ForbiddenException('Account is currently blocked by Administrator');
+        }
+        // Expired accounts are allowed to log in to renew their subscription
       }
     }
 
@@ -123,6 +134,10 @@ export class UsersService {
     delete resultUser.password;
 
     return { token, user: resultUser };
+  }
+
+  async getPlans() {
+    return await this.planModel.findAll({ order: [['price', 'ASC']] });
   }
 
   async getDashboardData(userNumber: string, userType: string) {
@@ -144,15 +159,34 @@ export class UsersService {
     });
 
     let profile: any = {};
+    let isExpired = false;
+    let daysRemaining = 0;
+
     if (user) {
       profile = user.toJSON();
       delete profile.password;
+
+      if (user.userType !== 'admin') {
+        const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
+        const expiryTime = createdAtTime + (user.validDays * 86400000);
+        isExpired = Date.now() > expiryTime || !user.isActive;
+        daysRemaining = Math.max(0, Math.ceil((expiryTime - Date.now()) / 86400000));
+        profile.validDays = daysRemaining;
+      } else {
+        daysRemaining = 3650;
+        isExpired = false;
+      }
     }
+
+    const plans = await this.planModel.findAll({ order: [['price', 'ASC']] });
 
     return {
       totalSent: userSentCount || (stat ? stat.totalMessagesSent : 0),
       pendingScheduled,
       totalScheduled,
+      isExpired,
+      daysRemaining,
+      plans,
       profile,
       recentLogs,
     };
@@ -166,25 +200,120 @@ export class UsersService {
     return result;
   }
 
-  async buySubscription(userNumber: string, userType: string, planId: number) {
-    const plan = await this.planModel.findByPk(planId);
-    if (!plan) throw new NotFoundException('Invalid plan');
+  async buySubscription(userNumber: string, userType: string, planIdInput: any, method: string = 'Direct') {
+    const plan = (await this.planModel.findByPk(planIdInput)) ||
+      (await this.planModel.findOne({ where: { planId: String(planIdInput) } }));
+
+    if (!plan) throw new NotFoundException('Selected subscription plan does not exist');
 
     const user = await this.userModel.findOne({ where: { number: userNumber, userType } });
+    if (!user) throw new NotFoundException('User account not found');
+
+    const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
+    const currentExpiry = createdAtTime + (user.validDays * 86400000);
+
     let newValidDays = user.validDays;
     let newCreatedAt = user.createdAt;
 
-    const expiry = user.createdAt.getTime() + (user.validDays * 86400000);
-    if (Date.now() < expiry) {
+    if (Date.now() < currentExpiry) {
       newValidDays += plan.days;
     } else {
       newCreatedAt = new Date();
       newValidDays = plan.days;
     }
 
-    await user.update({ validDays: newValidDays, createdAt: newCreatedAt });
+    await user.update({
+      validDays: newValidDays,
+      createdAt: newCreatedAt,
+      isActive: true
+    });
+
+    // Record Subscription History
+    try {
+      const startDate = new Date();
+      const expiryDate = new Date(startDate.getTime() + (plan.days * 86400000));
+      await this.subscriptionHistoryModel.create({
+        userNumber: user.number,
+        userName: user.name || 'User',
+        planName: plan.name,
+        days: plan.days,
+        price: plan.price,
+        paymentMethod: method,
+        startDate,
+        expiryDate,
+      });
+    } catch (err: any) {
+      console.error('⚠️ Failed to log subscription history:', err.message);
+    }
+
     const result = user.toJSON();
     delete result.password;
     return result;
+  }
+
+  async createRazorpayOrder(userNumber: string, userType: string, planIdInput: any) {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    const plan = (await this.planModel.findByPk(planIdInput)) ||
+      (await this.planModel.findOne({ where: { planId: String(planIdInput) } }));
+
+    if (!plan) throw new NotFoundException('Selected subscription plan does not exist');
+
+    if (!keyId || !keySecret || !keyId.trim() || !keySecret.trim()) {
+      return { isRazorpay: false, message: 'Razorpay keys not configured' };
+    }
+
+    try {
+      const amountInPaise = Math.round(plan.price * 100);
+      const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+
+      const response = await axios.post(
+        'https://api.razorpay.com/v1/orders',
+        {
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `rcpt_${Date.now()}`,
+          notes: { planId: plan.planId, userNumber }
+        },
+        {
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        isRazorpay: true,
+        keyId,
+        orderId: response.data.id,
+        amount: response.data.amount,
+        currency: response.data.currency,
+        planId: plan.id,
+        planName: plan.name
+      };
+    } catch (err: any) {
+      console.error('Razorpay order creation error:', err.response?.data || err.message);
+      return { isRazorpay: false, message: 'Failed to create Razorpay order' };
+    }
+  }
+
+  async verifyRazorpayPayment(userNumber: string, userType: string, body: any) {
+    const { razorpayPaymentId, razorpayOrderId, razorpaySignature, planId } = body;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (keySecret && razorpaySignature) {
+      const generatedSignature = crypto
+        .createHmac('sha256', keySecret)
+        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+        .digest('hex');
+
+      if (generatedSignature !== razorpaySignature) {
+        throw new ForbiddenException('Invalid Razorpay payment signature');
+      }
+    }
+
+    return await this.buySubscription(userNumber, userType, planId, 'Razorpay');
   }
 }

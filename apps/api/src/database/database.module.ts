@@ -11,6 +11,7 @@ import { MessageLog } from './models/MessageLog';
 import { Stat } from './models/Stat';
 import { Plan } from './models/Plan';
 import { ChatSession } from './models/ChatSession';
+import { SubscriptionHistory } from './models/SubscriptionHistory';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ChatSession } from './models/ChatSession';
             MessageLog,
             Stat,
             Plan,
+            SubscriptionHistory,
           ],
           autoLoadModels: true,
           synchronize: true,
@@ -70,6 +72,7 @@ import { ChatSession } from './models/ChatSession';
       MessageLog,
       Stat,
       Plan,
+      SubscriptionHistory,
     ]),
   ],
   exports: [SequelizeModule],

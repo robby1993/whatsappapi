@@ -19,24 +19,20 @@ export class AuthService {
     }
 
     const user = await this.userModel.findOne({ where: { number: tokenData.number } });
-    if (!user || !user.isActive) {
+    if (!user) {
       await this.tokenModel.destroy({ where: { token: tokenString } });
-      throw new ForbiddenException('Access denied');
+      throw new UnauthorizedException('User account not found');
     }
 
-    // Check subscription expiry for non-admin users if needed (legacy logic)
-    if (user.userType === 'user') {
-        const expiry = user.createdAt.getTime() + (user.validDays * 86400000);
-        if (Date.now() > expiry) {
-            await this.tokenModel.destroy({ where: { token: tokenString } });
-            throw new ForbiddenException('Subscription expired');
-        }
-    }
+    const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
+    const expiry = createdAtTime + (user.validDays * 86400000);
+    const isExpired = user.userType !== 'admin' && (Date.now() > expiry || user.validDays <= 0);
 
     return {
       userNumber: user.number,
       userType: user.userType,
       isActive: user.isActive,
+      isExpired,
     };
   }
 }

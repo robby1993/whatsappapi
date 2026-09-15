@@ -38,10 +38,22 @@ export class AdminController {
     return { message: `User ${number} permanently deleted.` };
   }
 
+  @Get('plans')
+  async getPlans() {
+    const result = await this.adminService.getPlans();
+    return { message: 'Plans fetched successfully', result };
+  }
+
   @Post('plans')
   async savePlan(@Body() body: any) {
     const result = await this.adminService.savePlan(body);
     return { message: 'Plan saved successfully', result };
+  }
+
+  @Delete('plans/:id')
+  async deletePlan(@Param('id') id: number) {
+    await this.adminService.deletePlan(id);
+    return { message: 'Plan deleted successfully' };
   }
 
   @Post('clear-database')
@@ -54,5 +66,11 @@ export class AdminController {
   async backupDatabase() {
     const result = await this.adminService.backupDatabase();
     return { message: 'Database backup generated successfully', result };
+  }
+
+  @Get('subscription-history')
+  async getSubscriptionHistory() {
+    const result = await this.adminService.getSubscriptionHistory();
+    return { message: 'Subscription history fetched', result };
   }
 }

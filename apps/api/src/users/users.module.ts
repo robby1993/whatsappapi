@@ -8,9 +8,10 @@ import { Plan } from '../database/models/Plan';
 import { Stat } from '../database/models/Stat';
 import { MessageLog } from '../database/models/MessageLog';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
+import { SubscriptionHistory } from '../database/models/SubscriptionHistory';
 
 @Module({
-  imports: [SequelizeModule.forFeature([User, Token, Plan, Stat, MessageLog, ScheduledMessage])],
+  imports: [SequelizeModule.forFeature([User, Token, Plan, Stat, MessageLog, ScheduledMessage, SubscriptionHistory])],
   providers: [UsersService],
   controllers: [UsersController],
 })

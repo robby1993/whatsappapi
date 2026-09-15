@@ -31,9 +31,18 @@ export default function LoginPage() {
       });
 
       if (response.data.status) {
-        setAuth(response.data.result.user, response.data.result.token);
+        const loggedInUser = response.data.result.user;
+        const token = response.data.result.token;
+        setAuth(loggedInUser, token);
+
         toast.success('Login successful!');
-        router.push('/dashboard');
+
+        if (loggedInUser.userType !== 'admin' && (loggedInUser.validDays <= 0 || !loggedInUser.isActive)) {
+          toast('Subscription expired. Select a plan to renew.', { icon: '⚠️' });
+          router.push('/subscription');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
         toast.error(response.data.message || 'Login failed');
       }
