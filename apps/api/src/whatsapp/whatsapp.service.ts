@@ -159,21 +159,20 @@ export class WhatsappService implements OnModuleInit {
             const reason = (lastDisconnect?.error as any)?.output?.statusCode;
             console.log(`❌ Connection closed for ${cleanPhone}. Reason: ${reason}`);
 
-            // Important: Clear the session from the map so a new one can be started
             this.sessions.delete(cleanPhone);
 
-            if (reason === DisconnectReason.loggedOut) {
+            const isLoggedOut = reason === DisconnectReason.loggedOut || reason === 401 || this.loggingOut.has(cleanPhone);
+
+            if (isLoggedOut) {
+              console.log(`🔒 Session logged out / unlinked for ${cleanPhone}. Cleaning up session data.`);
               this.sessionStatus.delete(cleanPhone);
               this.sessionModel.destroy({ where: { phone: cleanPhone } }).catch(() => {});
             } else if (reason === 515 || reason === DisconnectReason.restartRequired) {
               console.log(`🔄 Restart required (${reason}) for ${cleanPhone}, reconnecting now...`);
-              // Use a small delay to avoid tight loops
               setTimeout(() => this.initWhatsApp(cleanPhone).catch(() => {}), 1000);
-            } else if (!this.loggingOut.has(cleanPhone)) {
+            } else {
               this.sessionStatus.set(cleanPhone, { ...status, status: 'disconnected' });
-              // Backoff strategy
-              const delay = reason === 401 ? 10000 : 5000;
-              setTimeout(() => this.initWhatsApp(cleanPhone), delay);
+              setTimeout(() => this.initWhatsApp(cleanPhone), 5000);
             }
           }
         });
@@ -198,16 +197,30 @@ export class WhatsappService implements OnModuleInit {
     const cleanPhone = phone.replace(/\D/g, '');
     this.loggingOut.add(cleanPhone);
     const sock = this.sessions.get(cleanPhone);
+
     if (sock) {
       try {
+        console.log(`🚪 Sending logout signal to WhatsApp servers for: ${cleanPhone}`);
+        if (sock.ws?.readyState === 1 || sock.user) {
+          await sock.logout('User initiated disconnect').catch((err: any) => {
+            console.log(`⚠️ Socket logout error (ignoring): ${err?.message || err}`);
+          });
+        }
+      } catch (e) {}
+
+      try {
         sock.ev.removeAllListeners();
-        if (sock.ws?.readyState === 1) await sock.logout().catch(() => {});
         if (sock.ws) sock.ws.close();
       } catch (e) {}
+
       this.sessions.delete(cleanPhone);
       this.sessionStatus.delete(cleanPhone);
     }
+
+    // Completely purge session credentials & auth state from database
     await this.sessionModel.destroy({ where: { phone: cleanPhone } });
+    console.log(`🗑️ Auth state purged from database for: ${cleanPhone}`);
+
     setTimeout(() => this.loggingOut.delete(cleanPhone), 2000);
   }
 

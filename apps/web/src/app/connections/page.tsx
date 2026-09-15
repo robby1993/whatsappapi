@@ -74,7 +74,7 @@ export default function ConnectionsPage() {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch user sessions:', error);
+      // Suppress transient network log during server restart/hot-reload
     } finally {
       setLoading(false);
     }
