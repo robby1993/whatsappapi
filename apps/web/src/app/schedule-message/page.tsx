@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Clock, Smartphone, MessageSquare, Image as ImageIcon, X, Loader2, Calendar, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Clock, Smartphone, MessageSquare, Image as ImageIcon, X, Loader2, Calendar, Trash2, CheckCircle2, AlertCircle, Zap } from 'lucide-react';
 import { countries } from '@/lib/countries';
 
 interface ScheduledMsg {
@@ -22,6 +22,8 @@ export default function ScheduleMessagePage() {
   const [countryCode, setCountryCode] = useState('+91');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [message, setMessage] = useState('');
+  const [fromNumber, setFromNumber] = useState('');
+  const [sessions, setSessions] = useState<{ phone: string; status: string }[]>([]);
   const [scheduleDateTime, setScheduleDateTime] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -41,8 +43,26 @@ export default function ScheduleMessagePage() {
     }
   };
 
+  const fetchSessions = async () => {
+    try {
+      const res = await api.get('/whatsapp/user-sessions');
+      if (res.data?.status && Array.isArray(res.data.result)) {
+        setSessions(res.data.result);
+        const connected = res.data.result.find((s: any) => s.status === 'connected');
+        if (connected) {
+          setFromNumber(connected.phone);
+        } else if (res.data.result.length > 0) {
+          setFromNumber(res.data.result[0].phone);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch sessions');
+    }
+  };
+
   useEffect(() => {
     fetchScheduledMessages();
+    fetchSessions();
     const interval = setInterval(fetchScheduledMessages, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -97,6 +117,7 @@ export default function ScheduleMessagePage() {
 
       const fullNumber = countryCode.replace('+', '') + phoneNumber.replace(/\D/g, '');
       const response = await api.post('/whatsapp/schedule-message', {
+        from: fromNumber || undefined,
         phone: fullNumber,
         message: message,
         scheduleTime: selectedTime,
@@ -143,6 +164,29 @@ export default function ScheduleMessagePage() {
       {/* Schedule Form */}
       <div className="bg-white p-8 rounded-2xl border shadow-sm">
         <form onSubmit={handleScheduleMessage} className="space-y-6">
+          {/* Sender Account Dropdown */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <Zap size={16} className="text-emerald-600" />
+              Send From (WhatsApp Account)
+            </label>
+            <select
+              className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
+              value={fromNumber}
+              onChange={(e) => setFromNumber(e.target.value)}
+            >
+              {sessions.length === 0 ? (
+                <option value="">No connected devices (Go to Connections)</option>
+              ) : (
+                sessions.map((s) => (
+                  <option key={s.phone} value={s.phone}>
+                    +{s.phone} ({s.status})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -151,7 +195,7 @@ export default function ScheduleMessagePage() {
               </label>
               <div className="flex">
                 <select
-                  className="block w-32 px-3 py-3 border border-gray-300 rounded-l-lg border-r-0 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-50 text-sm"
+                  className="block w-32 px-3 py-3 border border-gray-300 rounded-l-xl border-r-0 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-50 text-sm"
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value)}
                 >
@@ -164,7 +208,7 @@ export default function ScheduleMessagePage() {
                 <input
                   type="text"
                   required
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-r-lg focus:ring-emerald-500 focus:border-emerald-500"
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-r-xl focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                   placeholder="Mobile Number"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
@@ -182,7 +226,7 @@ export default function ScheduleMessagePage() {
                 required
                 value={scheduleDateTime}
                 onChange={(e) => setScheduleDateTime(e.target.value)}
-                className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
               />
             </div>
           </div>
@@ -194,7 +238,7 @@ export default function ScheduleMessagePage() {
             </label>
             <textarea
               rows={4}
-              className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+              className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 resize-none text-sm"
               placeholder="Type your scheduled message here..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -210,7 +254,7 @@ export default function ScheduleMessagePage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2.5 border rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
+                className="px-4 py-2.5 border rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-700"
               >
                 {mediaFile ? 'Change Attachment' : 'Choose File'}
               </button>
@@ -225,7 +269,7 @@ export default function ScheduleMessagePage() {
                 <button
                   type="button"
                   onClick={removeMedia}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
                 >
                   <X size={20} />
                 </button>
@@ -233,7 +277,7 @@ export default function ScheduleMessagePage() {
             </div>
 
             {mediaPreview && (
-              <div className="mt-4 relative max-w-sm aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+              <div className="mt-4 relative max-w-sm aspect-video bg-gray-100 rounded-xl overflow-hidden border">
                 <img src={mediaPreview} alt="Preview" className="w-full h-full object-contain" />
               </div>
             )}
@@ -242,7 +286,7 @@ export default function ScheduleMessagePage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50"
+            className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50 text-sm"
           >
             {loading ? (
               <>
@@ -282,6 +326,7 @@ export default function ScheduleMessagePage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b text-xs uppercase text-gray-500 bg-gray-50/50">
+                  <th className="p-3">Sender</th>
                   <th className="p-3">Recipient</th>
                   <th className="p-3">Message</th>
                   <th className="p-3">Target Time</th>
@@ -294,6 +339,7 @@ export default function ScheduleMessagePage() {
                   const targetDate = new Date(Number(item.scheduleTime));
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="p-3 font-medium text-xs text-gray-600">+{item.sender}</td>
                       <td className="p-3 font-semibold text-gray-900">+{item.receiver}</td>
                       <td className="p-3 text-gray-700 max-w-xs truncate">
                         {item.mediaType ? `[${item.mediaType}] ${item.message || ''}` : item.message}

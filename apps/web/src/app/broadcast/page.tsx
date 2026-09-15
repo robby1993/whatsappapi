@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -17,7 +17,8 @@ import {
   Smartphone,
   Image as ImageIcon,
   X,
-  Loader2
+  Loader2,
+  Zap
 } from 'lucide-react';
 
 interface Contact {
@@ -30,12 +31,35 @@ export default function BroadcastPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [manualNumbers, setManualNumbers] = useState('');
   const [message, setMessage] = useState('');
+  const [fromNumber, setFromNumber] = useState('');
+  const [sessions, setSessions] = useState<{ phone: string; status: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState('image');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await api.get('/whatsapp/user-sessions');
+      if (res.data?.status && Array.isArray(res.data.result)) {
+        setSessions(res.data.result);
+        const connected = res.data.result.find((s: any) => s.status === 'connected');
+        if (connected) {
+          setFromNumber(connected.phone);
+        } else if (res.data.result.length > 0) {
+          setFromNumber(res.data.result[0].phone);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch sessions');
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -138,6 +162,7 @@ export default function BroadcastPage() {
 
       const numbers = contacts.map(c => c.number);
       const response = await api.post('/whatsapp/broadcast', {
+        from: fromNumber || undefined,
         numbers,
         message,
         mediaUrl,
@@ -165,7 +190,7 @@ export default function BroadcastPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-6xl mx-auto py-4">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-gray-900">Broadcast Message</h2>
@@ -174,7 +199,7 @@ export default function BroadcastPage() {
         {contacts.length > 0 && (
           <button
             onClick={clearContacts}
-            className="text-red-500 hover:text-red-700 font-bold flex items-center gap-2"
+            className="text-red-500 hover:text-red-700 font-bold flex items-center gap-2 text-sm"
           >
             <Trash2 size={18} />
             <span>Clear List</span>
@@ -185,10 +210,33 @@ export default function BroadcastPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-6">
+            {/* Sender Account Dropdown */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-2 flex items-center gap-2">
+                <Zap size={16} className="text-emerald-600" />
+                Send From (WhatsApp Account)
+              </label>
+              <select
+                className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
+                value={fromNumber}
+                onChange={(e) => setFromNumber(e.target.value)}
+              >
+                {sessions.length === 0 ? (
+                  <option value="">No connected devices (Go to Connections)</option>
+                ) : (
+                  sessions.map((s) => (
+                    <option key={s.phone} value={s.phone}>
+                      +{s.phone} ({s.status})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
             <div className="space-y-4">
               <div className="p-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                  <FileUp size={18} className="text-primary" />
+                <label className="block text-xs font-bold text-gray-700 mb-2 flex items-center gap-2">
+                  <FileUp size={16} className="text-emerald-600" />
                   Import from Excel
                 </label>
                 <input
@@ -196,25 +244,25 @@ export default function BroadcastPage() {
                   accept=".xlsx, .xls"
                   onChange={handleFileUpload}
                   ref={fileInputRef}
-                  className="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary-dark cursor-pointer border rounded-lg p-1 bg-white"
+                  className="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer border rounded-lg p-1 bg-white"
                 />
               </div>
 
               <div className="p-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                  <Smartphone size={18} className="text-primary" />
+                <label className="block text-xs font-bold text-gray-700 mb-2 flex items-center gap-2">
+                  <Smartphone size={16} className="text-emerald-600" />
                   Add Manual Numbers
                 </label>
                 <textarea
                   rows={3}
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary resize-none text-xs"
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 resize-none text-xs"
                   placeholder="919876543210, 919988776655..."
                   value={manualNumbers}
                   onChange={(e) => setManualNumbers(e.target.value)}
                 />
                 <button
                   onClick={handleAddManualNumbers}
-                  className="mt-3 w-full py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-xs font-bold transition-colors"
+                  className="mt-3 w-full py-2 bg-gray-200 hover:bg-gray-300 rounded-xl text-xs font-bold transition-colors"
                 >
                   Add Numbers
                 </button>
@@ -222,13 +270,13 @@ export default function BroadcastPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                <MessageSquare size={18} className="text-primary" />
+              <label className="block text-xs font-bold text-gray-700 mb-2 flex items-center gap-2">
+                <MessageSquare size={16} className="text-emerald-600" />
                 Message Content
               </label>
               <textarea
                 rows={5}
-                className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary resize-none text-sm"
+                className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 resize-none text-sm"
                 placeholder="Type your message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -236,15 +284,15 @@ export default function BroadcastPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                <ImageIcon size={18} className="text-primary" />
-                Add Media (Gallery)
+              <label className="block text-xs font-bold text-gray-700 mb-2 flex items-center gap-2">
+                <ImageIcon size={16} className="text-emerald-600" />
+                Add Media (Optional)
               </label>
               <div className="flex items-center space-x-3">
                 <button
                   type="button"
                   onClick={() => mediaInputRef.current?.click()}
-                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 text-xs font-bold"
+                  className="flex-1 px-4 py-2 border rounded-xl hover:bg-gray-50 text-xs font-bold"
                 >
                   {mediaFile ? 'Change File' : 'Pick File'}
                 </button>
@@ -256,13 +304,13 @@ export default function BroadcastPage() {
                   accept="image/*,video/*,audio/*,application/*"
                 />
                 {mediaFile && (
-                  <button onClick={removeMedia} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                  <button onClick={removeMedia} className="p-2 text-red-500 hover:bg-red-50 rounded-xl">
                     <X size={18} />
                   </button>
                 )}
               </div>
               {mediaPreview && (
-                <div className="mt-3 relative aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+                <div className="mt-3 relative aspect-video bg-gray-100 rounded-xl overflow-hidden border">
                   <img src={mediaPreview} alt="Preview" className="w-full h-full object-contain" />
                 </div>
               )}
@@ -271,7 +319,7 @@ export default function BroadcastPage() {
             <button
               onClick={handleSendBroadcast}
               disabled={loading || contacts.length === 0}
-              className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-black transition-all shadow-lg disabled:opacity-50"
+              className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50 text-sm"
             >
               {loading ? (
                 <>

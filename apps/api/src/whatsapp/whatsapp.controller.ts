@@ -7,6 +7,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
+import { Session } from '../database/models/Session';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -24,6 +25,8 @@ export class WhatsappController {
     private statModel: typeof Stat,
     @InjectModel(ScheduledMessage)
     private scheduledMessageModel: typeof ScheduledMessage,
+    @InjectModel(Session)
+    private sessionModel: typeof Session,
   ) {}
 
   @Post('upload')
@@ -93,6 +96,51 @@ export class WhatsappController {
       await new Promise((r) => setTimeout(r, 1000));
     }
     return { message: 'QR Timeout', result: null };
+  }
+
+  @Get('user-sessions')
+  async getUserSessions(@Req() req: any) {
+    try {
+      const dbSessions = await this.sessionModel.findAll({
+        where: { dataType: 'creds', dataId: 'base' },
+        attributes: ['phone']
+      });
+
+      const activeSessions = [];
+      const dbPhones = new Set<string>();
+
+      for (const session of dbSessions) {
+        if (!session.phone) continue;
+        const cleanPhone = String(session.phone).replace(/\D/g, '');
+        if (!cleanPhone) continue;
+
+        dbPhones.add(cleanPhone);
+        const liveStatus = this.whatsappService.getStatus(cleanPhone);
+        activeSessions.push({
+          phone: cleanPhone,
+          status: liveStatus.status || 'disconnected',
+          qr: liveStatus.qr || null,
+          pairingCode: liveStatus.pairingCode || null
+        });
+      }
+
+      for (const [phone, status] of this.whatsappService.sessionStatus.entries()) {
+        const cleanPhone = String(phone).replace(/\D/g, '');
+        if (cleanPhone && !dbPhones.has(cleanPhone)) {
+          activeSessions.push({
+            phone: cleanPhone,
+            status: status.status || 'connecting',
+            qr: status.qr || null,
+            pairingCode: status.pairingCode || null
+          });
+        }
+      }
+
+      return { message: 'User sessions fetched', result: activeSessions };
+    } catch (err: any) {
+      console.error('❌ Error fetching user sessions:', err.message);
+      return { message: 'Failed to fetch sessions', result: [] };
+    }
   }
 
   @Get('session-status')
