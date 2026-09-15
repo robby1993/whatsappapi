@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, UseGuards, Req, HttpStatus, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Query, Param, UseGuards, Req, HttpStatus, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappUtils } from './whatsapp-utils';
 import { TokenAuthGuard } from '../auth/guards/token-auth.guard';
@@ -6,10 +6,12 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { InjectModel } from '@nestjs/sequelize';
 import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
+import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import * as fs from 'fs';
+import { Op } from 'sequelize';
 
 @Controller('whatsapp')
 @UseGuards(TokenAuthGuard)
@@ -20,6 +22,8 @@ export class WhatsappController {
     private messageLogModel: typeof MessageLog,
     @InjectModel(Stat)
     private statModel: typeof Stat,
+    @InjectModel(ScheduledMessage)
+    private scheduledMessageModel: typeof ScheduledMessage,
   ) {}
 
   @Post('upload')
@@ -170,5 +174,53 @@ export class WhatsappController {
     const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
     await this.whatsappService.forceLogout(targetPhone);
     return { message: 'Logged out successfully' };
+  }
+
+  @Post('schedule-message')
+  async scheduleMessage(@Body() body: { phone: string; message: string; scheduleTime: string | number; from?: string; mediaUrl?: string; mediaType?: string }, @Req() req: any) {
+    const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
+    const cleanReceiver = body.phone.replace(/\D/g, '');
+
+    const timeInMs = typeof body.scheduleTime === 'number'
+      ? body.scheduleTime
+      : new Date(body.scheduleTime).getTime();
+
+    if (isNaN(timeInMs) || timeInMs <= Date.now()) {
+      return { status: false, message: 'Schedule time must be in the future', result: null };
+    }
+
+    const scheduled = await this.scheduledMessageModel.create({
+      sender,
+      receiver: cleanReceiver,
+      message: body.message || '',
+      mediaUrl: body.mediaUrl || null,
+      mediaType: body.mediaType || null,
+      scheduleTime: timeInMs,
+      status: 'pending'
+    });
+
+    return { status: true, message: 'Message scheduled successfully', result: scheduled };
+  }
+
+  @Get('scheduled-messages')
+  async getScheduledMessages(@Req() req: any) {
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const activePhones = Array.from(this.whatsappService.sessions.keys()).map(p => p.replace(/\D/g, ''));
+    const phoneFilter = Array.from(new Set([userPhone, ...activePhones])).filter(Boolean);
+
+    const scheduled = await this.scheduledMessageModel.findAll({
+      where: {
+        sender: { [Op.in]: phoneFilter }
+      },
+      order: [['scheduleTime', 'ASC']]
+    });
+
+    return { message: 'Scheduled messages fetched', result: scheduled };
+  }
+
+  @Delete('scheduled-messages/:id')
+  async deleteScheduledMessage(@Param('id') id: number, @Req() req: any) {
+    await this.scheduledMessageModel.destroy({ where: { id } });
+    return { status: true, message: 'Scheduled message cancelled and deleted' };
   }
 }

@@ -5,13 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
-  MessageSquare,
-  Users,
-  Settings,
+  Clock,
   LogOut,
   Zap,
-  FileText,
-  Database,
   ShieldCheck,
   Send,
   Radio
@@ -26,10 +22,8 @@ const Sidebar = () => {
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Connections', path: '/connections', icon: Zap },
     { name: 'Send Message', path: '/send-message', icon: Send },
+    { name: 'Schedule Message', path: '/schedule-message', icon: Clock },
     { name: 'Broadcast', path: '/broadcast', icon: Radio },
-    { name: 'ChatFlows', path: '/chatflows', icon: MessageSquare },
-    { name: 'Templates', path: '/templates', icon: FileText },
-    { name: 'Campaigns', path: '/campaigns', icon: Database },
   ];
 
   if (user?.userType === 'admin') {
