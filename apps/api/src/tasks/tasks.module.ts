@@ -6,7 +6,6 @@ import { QueuedMessage } from '../database/models/QueuedMessage';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
-import { Campaign } from '../database/models/Campaign';
 
 @Module({
   imports: [
@@ -15,7 +14,6 @@ import { Campaign } from '../database/models/Campaign';
       ScheduledMessage,
       MessageLog,
       Stat,
-      Campaign,
     ]),
     WhatsappModule,
   ],

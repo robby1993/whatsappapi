@@ -8,9 +8,6 @@ import { QueuedMessage } from '../database/models/QueuedMessage';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
-import { Campaign } from '../database/models/Campaign';
-import { join } from 'path';
-import * as fs from 'fs';
 
 @Injectable()
 export class TasksService {
@@ -26,8 +23,6 @@ export class TasksService {
     private messageLogModel: typeof MessageLog,
     @InjectModel(Stat)
     private statModel: typeof Stat,
-    @InjectModel(Campaign)
-    private campaignModel: typeof Campaign,
   ) {}
 
   @Interval(5000) // Every 5 seconds
@@ -78,14 +73,6 @@ export class TasksService {
         }
 
         try {
-          // Update campaign status to processing if it's still pending
-          if (msg.campaignId) {
-            await this.campaignModel.update(
-              { status: 'processing' },
-              { where: { id: msg.campaignId, status: 'pending' } }
-            );
-          }
-
           const cleanNumber = msg.receiver.replace(/\D/g, '');
           if (!cleanNumber || cleanNumber.length < 10) {
             throw new Error(`Invalid phone number: ${msg.receiver}`);
@@ -113,22 +100,11 @@ export class TasksService {
 
           await msg.update({ status: 'sent' });
 
-          if (msg.campaignId) {
-            const campaign = await this.campaignModel.findByPk(msg.campaignId);
-            if (campaign) {
-              await campaign.increment('sentCount');
-              if (campaign.sentCount + campaign.failedCount >= campaign.totalContacts) {
-                await campaign.update({ status: 'completed' });
-              }
-            }
-          }
-
           await this.messageLogModel.create({
             sender: msg.sender,
             receiver: msg.receiver,
             message: msg.message,
             status: 'sent',
-            campaignId: msg.campaignId,
             messageId: sentMsg?.key?.id,
             mediaUrl: msg.mediaUrl,
             mediaType: msg.mediaType,
@@ -139,15 +115,6 @@ export class TasksService {
         } catch (e) {
           this.logger.error(`❌ Error sending queued message to ${msg.receiver}:`, e.message);
           await msg.update({ status: 'failed' });
-          if (msg.campaignId) {
-            const campaign = await this.campaignModel.findByPk(msg.campaignId);
-            if (campaign) {
-              await campaign.increment('failedCount');
-              if (campaign.sentCount + campaign.failedCount >= campaign.totalContacts) {
-                await campaign.update({ status: 'completed' });
-              }
-            }
-          }
         }
       }
     } catch (e) {

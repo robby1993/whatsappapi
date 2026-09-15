@@ -45,19 +45,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full p-8 bg-white rounded-xl shadow-lg">
-        <div className="text-center mb-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-6 bg-white p-8 rounded-2xl shadow-lg border">
+        <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
-          <p className="text-gray-600">Login to MsgPilot Dashboard</p>
+          <p className="text-gray-600 mt-1 text-sm">Login to MsgPilot WhatsApp Dashboard</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-            <div className="flex mt-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+            <div className="flex">
               <select
-                className="block w-32 px-3 py-3 border border-gray-300 rounded-l-lg border-r-0 focus:ring-primary focus:border-primary bg-white text-sm"
+                className="block w-32 px-3 py-3 border border-gray-300 rounded-l-xl border-r-0 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-50 text-sm"
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value)}
               >
@@ -70,7 +70,7 @@ export default function LoginPage() {
               <input
                 type="text"
                 required
-                className="block w-full px-4 py-3 border border-gray-300 rounded-r-lg focus:ring-primary focus:border-primary"
+                className="block w-full px-4 py-3 border border-gray-300 rounded-r-xl focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                 placeholder="Mobile Number"
                 value={number}
                 onChange={(e) => setNumber(e.target.value)}
@@ -79,12 +79,12 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
-                className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary pr-12"
+                className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 pr-12 text-sm"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -93,21 +93,22 @@ export default function LoginPage() {
                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
 
-          <div className="flex space-x-4">
+          <div className="flex items-center space-x-6 bg-gray-50 p-3 rounded-xl border">
+            <span className="text-xs font-semibold text-gray-500 uppercase">Role:</span>
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="radio"
                 name="userType"
                 checked={userType === 'user'}
                 onChange={() => setUserType('user')}
-                className="text-primary"
+                className="text-emerald-600 focus:ring-emerald-500"
               />
-              <span className="text-sm text-gray-700">User</span>
+              <span className="text-sm font-medium text-gray-700">User</span>
             </label>
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -115,24 +116,24 @@ export default function LoginPage() {
                 name="userType"
                 checked={userType === 'admin'}
                 onChange={() => setUserType('admin')}
-                className="text-primary"
+                className="text-emerald-600 focus:ring-emerald-500"
               />
-              <span className="text-sm text-gray-700">Admin</span>
+              <span className="text-sm font-medium text-gray-700">Admin</span>
             </label>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50"
+            className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50 text-sm"
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-gray-600">
+        <div className="text-center text-sm text-gray-600 pt-2 border-t">
           Don't have an account?{' '}
-          <Link href="/register" className="text-primary font-semibold hover:underline">
+          <Link href="/register" className="text-emerald-600 font-semibold hover:underline">
             Register here
           </Link>
         </div>

@@ -6,6 +6,7 @@ import { Token } from '../database/models/Token';
 import { Plan } from '../database/models/Plan';
 import { Stat } from '../database/models/Stat';
 import { MessageLog } from '../database/models/MessageLog';
+import { ScheduledMessage } from '../database/models/ScheduledMessage';
 
 @Injectable()
 export class UsersService {
@@ -20,7 +21,43 @@ export class UsersService {
     private statModel: typeof Stat,
     @InjectModel(MessageLog)
     private messageLogModel: typeof MessageLog,
+    @InjectModel(ScheduledMessage)
+    private scheduledMessageModel: typeof ScheduledMessage,
   ) {}
+
+  async seedAdmin() {
+    const adminNum = '919999999999';
+    const adminPass = 'admin123';
+
+    let [admin] = await this.userModel.findOrCreate({
+      where: { number: adminNum, userType: 'admin' },
+      defaults: {
+        number: adminNum,
+        name: 'Default Admin',
+        gender: 'Male',
+        password: adminPass,
+        userType: 'admin',
+        validDays: 3650,
+        isActive: true,
+      },
+    });
+
+    if (admin.password !== adminPass || !admin.isActive) {
+      await admin.update({ password: adminPass, isActive: true, validDays: 3650 });
+    }
+
+    const token = crypto.randomBytes(24).toString('hex');
+    await this.tokenModel.create({
+      token,
+      number: admin.number,
+      userType: admin.userType,
+    });
+
+    const resultUser = admin.toJSON();
+    delete resultUser.password;
+
+    return { token, user: resultUser };
+  }
 
   async register(data: any) {
     const { name, gender, number, password, userType } = data;
@@ -41,7 +78,8 @@ export class UsersService {
       gender: gender || 'Not Specified',
       password,
       userType: type,
-      validDays: 3,
+      validDays: type === 'admin' ? 3650 : 3,
+      isActive: true,
     });
 
     const result = newUser.toJSON();
@@ -66,7 +104,12 @@ export class UsersService {
     }
 
     if (!user.isActive) {
-      throw new ForbiddenException('Account is currently inactive');
+      if (user.userType === 'admin') {
+        // Automatically activate admin accounts upon valid login
+        await user.update({ isActive: true });
+      } else {
+        throw new ForbiddenException('Account is currently inactive');
+      }
     }
 
     const token = crypto.randomBytes(24).toString('hex');
@@ -85,18 +128,32 @@ export class UsersService {
   async getDashboardData(userNumber: string, userType: string) {
     const user = await this.userModel.findOne({ where: { number: userNumber, userType } });
     const stat = await this.statModel.findOne({ where: { id: 1 } });
+
+    const userSentCount = await this.messageLogModel.count({ where: { sender: userNumber } });
+    const pendingScheduled = await this.scheduledMessageModel.count({
+      where: { sender: userNumber, status: 'pending' }
+    });
+    const totalScheduled = await this.scheduledMessageModel.count({
+      where: { sender: userNumber }
+    });
+
     const recentLogs = await this.messageLogModel.findAll({
       where: { sender: userNumber },
       order: [['timestamp', 'DESC']],
       limit: 5,
     });
 
-    const result = user.toJSON();
-    delete result.password;
+    let profile: any = {};
+    if (user) {
+      profile = user.toJSON();
+      delete profile.password;
+    }
 
     return {
-      totalSent: stat ? stat.totalMessagesSent : 0,
-      profile: result,
+      totalSent: userSentCount || (stat ? stat.totalMessagesSent : 0),
+      pendingScheduled,
+      totalScheduled,
+      profile,
       recentLogs,
     };
   }

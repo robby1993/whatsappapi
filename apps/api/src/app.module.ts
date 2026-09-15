@@ -8,8 +8,6 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { ChatflowsModule } from './chatflows/chatflows.module';
-import { CampaignsModule } from './campaigns/campaigns.module';
-import { TemplatesModule } from './templates/templates.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
@@ -29,8 +27,6 @@ import { AppController } from './app.controller';
     UsersModule,
     WhatsappModule,
     ChatflowsModule,
-    CampaignsModule,
-    TemplatesModule,
     TasksModule,
     AdminModule,
   ],

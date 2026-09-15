@@ -1,5 +1,4 @@
-import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
-import { Campaign } from './Campaign';
+import { Table, Column, Model, DataType } from 'sequelize-typescript';
 
 @Table({
   tableName: 'MessageLogs',
@@ -67,14 +66,4 @@ export class MessageLog extends Model<MessageLog> {
     defaultValue: () => Date.now(),
   })
   timestamp: number;
-
-  @ForeignKey(() => Campaign)
-  @Column({
-    type: DataType.INTEGER,
-    allowNull: true,
-  })
-  campaignId: number;
-
-  @BelongsTo(() => Campaign)
-  campaign: Campaign;
 }

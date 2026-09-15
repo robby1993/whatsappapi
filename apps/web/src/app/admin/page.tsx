@@ -10,13 +10,16 @@ import {
   XCircle,
   Calendar,
   Settings,
-  MoreVertical
+  Download,
+  Loader2,
+  Database
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
@@ -36,6 +39,34 @@ export default function AdminPage() {
       toast.error('Failed to fetch admin data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const downloadBackup = async () => {
+    setDownloading(true);
+    try {
+      const res = await api.get('/admin/backup-database');
+      if (res.data?.status && res.data?.result) {
+        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+          JSON.stringify(res.data.result, null, 2)
+        )}`;
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute('href', jsonString);
+        downloadAnchor.setAttribute(
+          'download',
+          `database_backup_${new Date().toISOString().slice(0, 10)}.json`
+        );
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        toast.success('Database backup downloaded successfully!');
+      } else {
+        toast.error('Failed to generate database backup');
+      }
+    } catch (err: any) {
+      toast.error('Error downloading database backup');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -74,12 +105,33 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-3xl font-bold text-gray-900">Admin Panel</h2>
-        <p className="text-gray-600">Global user management and system health</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">Admin Panel</h2>
+          <p className="text-gray-600">Global user management and system health</p>
+        </div>
+
+        {/* Database Backup Export Button */}
+        <button
+          onClick={downloadBackup}
+          disabled={downloading}
+          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all shadow flex items-center space-x-2 text-sm disabled:opacity-50"
+        >
+          {downloading ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              <span>Exporting Backup...</span>
+            </>
+          ) : (
+            <>
+              <Download size={18} />
+              <span>Download Database Backup</span>
+            </>
+          )}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl border shadow-sm">
           <p className="text-xs text-gray-500 font-bold uppercase mb-1">Total Users</p>
           <p className="text-2xl font-black">{stats?.totalUsers || 0}</p>
@@ -92,16 +144,12 @@ export default function AdminPage() {
           <p className="text-xs text-gray-500 font-bold uppercase mb-1">Total Messages</p>
           <p className="text-2xl font-black text-blue-600">{stats?.totalMessages || 0}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl border shadow-sm">
-          <p className="text-xs text-gray-500 font-bold uppercase mb-1">Campaigns</p>
-          <p className="text-2xl font-black text-purple-600">{stats?.totalCampaigns || 0}</p>
-        </div>
       </div>
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <div className="p-6 border-b flex justify-between items-center">
           <h3 className="text-lg font-bold flex items-center space-x-2">
-            <Users size={20} className="text-primary" />
+            <Users size={20} className="text-emerald-600" />
             <span>User Management</span>
           </h3>
         </div>

@@ -1,5 +1,4 @@
-import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
-import { Campaign } from './Campaign';
+import { Table, Column, Model, DataType } from 'sequelize-typescript';
 
 @Table({
   tableName: 'QueuedMessages',
@@ -41,16 +40,6 @@ export class QueuedMessage extends Model<QueuedMessage> {
     defaultValue: 'pending',
   })
   status: string;
-
-  @ForeignKey(() => Campaign)
-  @Column({
-    type: DataType.INTEGER,
-    allowNull: true,
-  })
-  campaignId: number;
-
-  @BelongsTo(() => Campaign)
-  campaign: Campaign;
 
   @Column({
     type: DataType.DATE,

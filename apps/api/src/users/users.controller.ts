@@ -6,6 +6,12 @@ import { TokenAuthGuard } from '../auth/guards/token-auth.guard';
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
+  @Post('seed-admin')
+  async seedAdmin() {
+    const result = await this.usersService.seedAdmin();
+    return { message: 'Admin account initialized', result };
+  }
+
   @Post('register')
   async register(@Body() body: any) {
     const result = await this.usersService.register(body);

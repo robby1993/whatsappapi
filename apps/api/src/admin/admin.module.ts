@@ -6,9 +6,7 @@ import { User } from '../database/models/User';
 import { Token } from '../database/models/Token';
 import { Session } from '../database/models/Session';
 import { MessageLog } from '../database/models/MessageLog';
-import { Campaign } from '../database/models/Campaign';
 import { Plan } from '../database/models/Plan';
-import { Template } from '../database/models/Template';
 import { Stat } from '../database/models/Stat';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { QueuedMessage } from '../database/models/QueuedMessage';
@@ -20,9 +18,7 @@ import { QueuedMessage } from '../database/models/QueuedMessage';
       Token,
       Session,
       MessageLog,
-      Campaign,
       Plan,
-      Template,
       Stat,
       ScheduledMessage,
       QueuedMessage,

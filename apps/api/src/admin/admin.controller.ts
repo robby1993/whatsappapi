@@ -49,4 +49,10 @@ export class AdminController {
     await this.adminService.clearDatabase();
     return { message: 'Database cleared (except admin users)' };
   }
+
+  @Get('backup-database')
+  async backupDatabase() {
+    const result = await this.adminService.backupDatabase();
+    return { message: 'Database backup generated successfully', result };
+  }
 }

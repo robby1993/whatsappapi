@@ -59,27 +59,27 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Sent"
-          value={stats.totalSent}
+          value={stats.totalSent || 0}
           icon={Send}
           color="bg-blue-500"
         />
         <StatCard
-          title="Valid Days"
-          value={stats.profile?.validDays || 0}
+          title="Pending Scheduled"
+          value={stats.pendingScheduled || 0}
           icon={Clock}
-          color="bg-green-500"
+          color="bg-amber-500"
         />
         <StatCard
-          title="ChatFlows"
-          value="-"
-          icon={MessageSquare}
-          color="bg-purple-500"
+          title="Total Scheduled"
+          value={stats.totalScheduled || 0}
+          icon={Clock}
+          color="bg-emerald-500"
         />
         <StatCard
-          title="Status"
-          value={stats.profile?.isActive ? 'Active' : 'Inactive'}
+          title="Account Days Left"
+          value={`${stats.profile?.validDays || 0} Days`}
           icon={Users}
-          color="bg-orange-500"
+          color="bg-indigo-500"
         />
       </div>
 

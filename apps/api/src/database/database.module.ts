@@ -5,12 +5,10 @@ import { User } from './models/User';
 import { Token } from './models/Token';
 import { Session } from './models/Session';
 import { ChatFlow } from './models/ChatFlow';
-import { Campaign } from './models/Campaign';
 import { QueuedMessage } from './models/QueuedMessage';
 import { ScheduledMessage } from './models/ScheduledMessage';
 import { MessageLog } from './models/MessageLog';
 import { Stat } from './models/Stat';
-import { Template } from './models/Template';
 import { Plan } from './models/Plan';
 import { ChatSession } from './models/ChatSession';
 
@@ -36,12 +34,10 @@ import { ChatSession } from './models/ChatSession';
             Session,
             ChatFlow,
             ChatSession,
-            Campaign,
             QueuedMessage,
             ScheduledMessage,
             MessageLog,
             Stat,
-            Template,
             Plan,
           ],
           autoLoadModels: true,
@@ -69,12 +65,10 @@ import { ChatSession } from './models/ChatSession';
       Session,
       ChatFlow,
       ChatSession,
-      Campaign,
       QueuedMessage,
       ScheduledMessage,
       MessageLog,
       Stat,
-      Template,
       Plan,
     ]),
   ],
