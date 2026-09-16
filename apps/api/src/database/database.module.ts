@@ -29,7 +29,7 @@ import { WabaFlow } from './models/WabaFlow';
           throw new Error('DATABASE_URL environment variable is not defined');
         }
 
-        const isRender = dbUrl.includes('render.com');
+        const isRemote = dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1');
 
         return {
           dialect: 'postgres',
@@ -59,7 +59,7 @@ import { WabaFlow } from './models/WabaFlow';
           },
           logging: false,
           dialectOptions: {
-            ssl: isRender
+            ssl: isRemote
               ? {
                   require: true,
                   rejectUnauthorized: false,
