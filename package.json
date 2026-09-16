@@ -8,6 +8,10 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "npm --prefix apps/api run build && npm --prefix apps/web run build",
+    "start": "node apps/api/dist/main.js",
+    "start:api": "node apps/api/dist/main.js",
+    "start:web": "npm --prefix apps/web run start",
     "api:dev": "npm --prefix apps/api run build && npm --prefix apps/api run start:dev",
     "web:dev": "npm --prefix apps/web run dev",
     "dev": "concurrently \"npm run api:dev\" \"npm run web:dev\"",

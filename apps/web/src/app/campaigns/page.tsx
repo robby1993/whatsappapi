@@ -1,1 +1,5 @@
-// Page removed
+import { redirect } from 'next/navigation';
+
+export default function RemovedCampaignsPage() {
+  redirect('/dashboard');
+}
