@@ -12,6 +12,11 @@ import { Stat } from './models/Stat';
 import { Plan } from './models/Plan';
 import { ChatSession } from './models/ChatSession';
 import { SubscriptionHistory } from './models/SubscriptionHistory';
+import { WabaDevice } from './models/WabaDevice';
+import { WabaTemplate } from './models/WabaTemplate';
+import { WabaCampaign } from './models/WabaCampaign';
+import { WabaAutomation } from './models/WabaAutomation';
+import { WabaFlow } from './models/WabaFlow';
 
 @Module({
   imports: [
@@ -41,6 +46,11 @@ import { SubscriptionHistory } from './models/SubscriptionHistory';
             Stat,
             Plan,
             SubscriptionHistory,
+            WabaDevice,
+            WabaTemplate,
+            WabaCampaign,
+            WabaAutomation,
+            WabaFlow,
           ],
           autoLoadModels: true,
           synchronize: true,
@@ -73,6 +83,11 @@ import { SubscriptionHistory } from './models/SubscriptionHistory';
       Stat,
       Plan,
       SubscriptionHistory,
+      WabaDevice,
+      WabaTemplate,
+      WabaCampaign,
+      WabaAutomation,
+      WabaFlow,
     ]),
   ],
   exports: [SequelizeModule],

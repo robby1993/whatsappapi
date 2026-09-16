@@ -16,7 +16,10 @@ import {
   Plus,
   Zap,
   History,
-  Check
+  Check,
+  Key,
+  Save,
+  Lock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -53,27 +56,66 @@ export default function AdminPage() {
   const [planPrice, setPlanPrice] = useState('499');
   const [savingPlan, setSavingPlan] = useState(false);
 
+  // System Config State (Razorpay & Meta WABA)
+  const [razorpayKeyId, setRazorpayKeyId] = useState('');
+  const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
+  const [metaAppId, setMetaAppId] = useState('');
+  const [metaAppSecret, setMetaAppSecret] = useState('');
+  const [savingConfig, setSavingConfig] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
     try {
-      const [usersRes, statsRes, plansRes, historyRes] = await Promise.all([
+      const [usersRes, statsRes, plansRes, historyRes, configRes] = await Promise.all([
         api.get('/admin/users'),
         api.get('/admin/stats'),
         api.get('/admin/plans'),
         api.get('/admin/subscription-history'),
+        api.get('/admin/config').catch(() => ({ data: { result: {} } })),
       ]);
 
       if (usersRes.data.status) setUsers(usersRes.data.result);
       if (statsRes.data.status) setStats(statsRes.data.result);
       if (plansRes.data.status && Array.isArray(plansRes.data.result)) setPlans(plansRes.data.result);
       if (historyRes.data?.status && Array.isArray(historyRes.data.result)) setSubHistory(historyRes.data.result);
+
+      if (configRes.data?.result) {
+        setRazorpayKeyId(configRes.data.result.razorpayKeyId || '');
+        setRazorpayKeySecret(configRes.data.result.razorpayKeySecret || '');
+        setMetaAppId(configRes.data.result.metaAppId || '');
+        setMetaAppSecret(configRes.data.result.metaAppSecret || '');
+      }
     } catch (error) {
       toast.error('Failed to fetch admin data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingConfig(true);
+    try {
+      const res = await api.post('/admin/config', {
+        razorpayKeyId,
+        razorpayKeySecret,
+        metaAppId,
+        metaAppSecret,
+      });
+
+      if (res.data?.status) {
+        toast.success('System API Integration Config saved successfully!');
+        fetchData();
+      } else {
+        toast.error('Failed to save configuration');
+      }
+    } catch (err: any) {
+      toast.error('Error saving system configuration');
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -188,7 +230,7 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold text-gray-900">Admin Panel</h2>
-          <p className="text-gray-600">Global user management, subscription plans, and system health</p>
+          <p className="text-gray-600">Global user management, integration settings, and system health</p>
         </div>
 
         {/* Database Backup Export Button */}
@@ -224,6 +266,86 @@ export default function AdminPage() {
           <p className="text-xs text-gray-500 font-bold uppercase mb-1">Total Messages</p>
           <p className="text-2xl font-black text-blue-600">{stats?.totalMessages || 0}</p>
         </div>
+      </div>
+
+      {/* ------------ SYSTEM INTEGRATIONS CONFIG (RAZORPAY & META WABA) ------------ */}
+      <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
+        <div className="flex items-center justify-between border-b pb-4">
+          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <Key size={20} className="text-emerald-600" />
+            System API Integrations Configuration (Admin Only)
+          </h3>
+          <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-3 py-1 rounded-full">
+            Global Credentials
+          </span>
+        </div>
+
+        <form onSubmit={handleSaveConfig} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Razorpay Keys */}
+            <div className="p-5 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-4">
+              <h4 className="font-bold text-emerald-900 text-sm flex items-center gap-1.5">
+                <CreditCard size={18} className="text-emerald-600" /> Razorpay Payment Credentials
+              </h4>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Razorpay Key ID</label>
+                <input
+                  type="text"
+                  placeholder="rzp_live_..."
+                  value={razorpayKeyId}
+                  onChange={(e) => setRazorpayKeyId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Razorpay Key Secret</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={razorpayKeySecret}
+                  onChange={(e) => setRazorpayKeySecret(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Meta App Credentials */}
+            <div className="p-5 bg-blue-50/50 border border-blue-200 rounded-xl space-y-4">
+              <h4 className="font-bold text-blue-900 text-sm flex items-center gap-1.5">
+                <Zap size={18} className="text-blue-600" /> Meta WhatsApp Business API App Credentials
+              </h4>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Meta App ID</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 123456789012345"
+                  value={metaAppId}
+                  onChange={(e) => setMetaAppId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Meta App Secret</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={metaAppSecret}
+                  onChange={(e) => setMetaAppSecret(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={savingConfig}
+            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow text-sm disabled:opacity-50 flex items-center justify-center space-x-2"
+          >
+            {savingConfig ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+            <span>Save Integration Configurations</span>
+          </button>
+        </form>
       </div>
 
       {/* ------------ SUBSCRIPTION PLANS MANAGEMENT ------------ */}

@@ -110,6 +110,31 @@ export class AdminService {
     });
   }
 
+  async getConfig() {
+    return {
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
+      razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET ? '••••••••' : '',
+      metaAppId: process.env.META_APP_ID || process.env.NEXT_PUBLIC_META_APP_ID || '',
+      metaAppSecret: process.env.META_APP_SECRET ? '••••••••' : '',
+    };
+  }
+
+  async saveConfig(data: any) {
+    if (data.razorpayKeyId !== undefined) process.env.RAZORPAY_KEY_ID = data.razorpayKeyId.trim();
+    if (data.razorpayKeySecret !== undefined && !data.razorpayKeySecret.includes('••••')) {
+      process.env.RAZORPAY_KEY_SECRET = data.razorpayKeySecret.trim();
+    }
+    if (data.metaAppId !== undefined) {
+      process.env.META_APP_ID = data.metaAppId.trim();
+      process.env.NEXT_PUBLIC_META_APP_ID = data.metaAppId.trim();
+    }
+    if (data.metaAppSecret !== undefined && !data.metaAppSecret.includes('••••')) {
+      process.env.META_APP_SECRET = data.metaAppSecret.trim();
+    }
+
+    return await this.getConfig();
+  }
+
   async backupDatabase() {
     const users = await this.userModel.findAll();
     const messageLogs = await this.messageLogModel.findAll();

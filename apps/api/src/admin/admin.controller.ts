@@ -73,4 +73,16 @@ export class AdminController {
     const result = await this.adminService.getSubscriptionHistory();
     return { message: 'Subscription history fetched', result };
   }
+
+  @Get('config')
+  async getConfig() {
+    const result = await this.adminService.getConfig();
+    return { message: 'System config fetched', result };
+  }
+
+  @Post('config')
+  async saveConfig(@Body() body: any) {
+    const result = await this.adminService.saveConfig(body);
+    return { message: 'System config updated successfully', result };
+  }
 }

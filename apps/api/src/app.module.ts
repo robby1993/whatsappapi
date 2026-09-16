@@ -10,6 +10,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { ChatflowsModule } from './chatflows/chatflows.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AdminModule } from './admin/admin.module';
+import { WabaModule } from './waba/waba.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -29,6 +30,7 @@ import { AppController } from './app.controller';
     ChatflowsModule,
     TasksModule,
     AdminModule,
+    WabaModule,
   ],
   controllers: [AppController],
 })
