@@ -49,6 +49,22 @@ export class IncomingMessageHandler {
         if (!text || text.toLowerCase().includes('waiting for this message')) continue;
         console.log(`📩 ${botPhone} ← ${senderJid}: "${text}"`);
 
+        // Save incoming received message to MessageLog so it displays in /chats
+        const cleanSender = (senderJid || '').replace(/@.*$/, '').replace(/\D/g, '');
+        const cleanBotPhone = (botPhone || '').replace(/\D/g, '');
+
+        if (cleanSender && cleanBotPhone && cleanSender.length >= 10 && cleanSender.length <= 13) {
+          await this.messageLogModel.create({
+            sender: cleanSender,
+            receiver: cleanBotPhone,
+            message: text,
+            status: 'received',
+            messageId: msg.key.id || `inc_${Date.now()}`,
+            timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
+          });
+          console.log(`💾 Saved incoming received message: ${cleanSender} → ${cleanBotPhone}`);
+        }
+
         // 0. Handle Global Commands (Exit/Restart)
         if (this.isGlobalCommand(text)) {
            await this.chatSessionModel.destroy({ where: { senderJid, botPhone } });
@@ -186,7 +202,15 @@ export class IncomingMessageHandler {
     }
 
     if (options) {
-      await sock.sendMessage(jid, options);
+      const res = await sock.sendMessage(jid, options);
+      const cleanReceiver = jid.replace(/@.*$/, '').replace(/\D/g, '');
+      await this.messageLogModel.create({
+        sender: 'AutoBot',
+        receiver: cleanReceiver,
+        message: formattedText,
+        status: 'sent',
+        messageId: res?.key?.id || `bot_${Date.now()}`,
+      });
     }
   }
 

@@ -23,7 +23,8 @@ import {
   Settings,
   Database,
   Key,
-  X
+  X,
+  MessageSquare
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
@@ -39,6 +40,7 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile }: SidebarProps) => {
   const webBaileysItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Connections', path: '/connections', icon: Zap },
+    { name: 'Chats', path: '/chats', icon: MessageSquare },
     { name: 'Send Message', path: '/send-message', icon: Send },
     { name: 'Schedule Message', path: '/schedule-message', icon: Clock },
     { name: 'Broadcast', path: '/broadcast', icon: Radio },

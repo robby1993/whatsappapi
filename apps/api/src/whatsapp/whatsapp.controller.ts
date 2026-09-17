@@ -297,6 +297,82 @@ export class WhatsappController {
     return { status: true, message: 'Message scheduled successfully', result: scheduled };
   }
 
+  @Get('chats')
+  async getChats(@Req() req: any) {
+    try {
+      const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+      const isAdmin = req.user?.userType === 'admin';
+
+      const whereCondition = isAdmin
+        ? {}
+        : {
+            [Op.or]: [
+              { sender: userPhone },
+              { receiver: userPhone }
+            ]
+          };
+
+      const logs = await this.messageLogModel.findAll({
+        where: whereCondition,
+        order: [['createdAt', 'DESC']],
+        limit: 500,
+      });
+
+      const chatsMap = new Map<string, any>();
+
+      for (const log of logs) {
+        const otherNumber = log.sender === userPhone ? log.receiver : log.sender;
+        const cleanOther = (otherNumber || '').replace(/\D/g, '');
+
+        if (!cleanOther || cleanOther === userPhone) continue;
+        if (cleanOther.length < 10 || cleanOther.length > 13 || cleanOther.startsWith('1203')) continue;
+
+        if (!chatsMap.has(cleanOther)) {
+          chatsMap.set(cleanOther, {
+            phone: cleanOther,
+            lastMessage: log.message || (log.mediaUrl ? '📷 Media Attachment' : 'Message'),
+            timestamp: log.createdAt || log.timestamp,
+            status: log.status,
+          });
+        }
+      }
+
+      return { status: true, message: 'Chats fetched successfully', result: Array.from(chatsMap.values()) };
+    } catch (err: any) {
+      console.error('❌ Error fetching chats:', err.message);
+      return { status: false, message: err.message, result: [] };
+    }
+  }
+
+  @Get('chats/:chatNumber')
+  async getChatMessages(@Param('chatNumber') chatNumber: string, @Req() req: any) {
+    try {
+      const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+      const cleanOther = (chatNumber || '').replace(/\D/g, '');
+
+      if (!cleanOther) {
+        return { status: true, message: 'Invalid chat number', result: [] };
+      }
+
+      const messages = await this.messageLogModel.findAll({
+        where: {
+          [Op.or]: [
+            { sender: userPhone, receiver: cleanOther },
+            { sender: cleanOther, receiver: userPhone },
+            { sender: cleanOther, receiver: { [Op.like]: `%${userPhone}%` } }
+          ]
+        },
+        order: [['createdAt', 'ASC']],
+        limit: 200,
+      });
+
+      return { status: true, message: 'Chat history fetched', result: messages };
+    } catch (err: any) {
+      console.error('❌ Error fetching chat messages:', err.message);
+      return { status: false, message: err.message, result: [] };
+    }
+  }
+
   @Get('scheduled-messages')
   async getScheduledMessages(@Req() req: any) {
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
