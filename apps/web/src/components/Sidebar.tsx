@@ -19,7 +19,10 @@ import {
   Bot,
   Calendar,
   GitFork,
-  CheckCircle2
+  Users,
+  Settings,
+  Database,
+  Key
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
@@ -45,6 +48,14 @@ const Sidebar = () => {
     { name: 'Automation', path: '/waba/automation', icon: Bot },
     { name: 'Campaigns', path: '/waba/campaigns', icon: Calendar },
     { name: 'Flow Builder', path: '/waba/flow-builder', icon: GitFork },
+  ];
+
+  const adminItems = [
+    { name: 'Admin Dashboard', path: '/admin', icon: LayoutDashboard },
+    { name: 'User Management', path: '/admin/users', icon: Users },
+    { name: 'Subscriptions & Plans', path: '/admin/subscriptions', icon: CreditCard },
+    { name: 'Configuration & Keys', path: '/admin/settings', icon: Key },
+    { name: 'Database Backup', path: '/admin/backup', icon: Database },
   ];
 
   return (
@@ -113,23 +124,33 @@ const Sidebar = () => {
           </div>
         </div>
 
-        {/* ADMIN SECTION */}
+        {/* SECTION 3: SYSTEM ADMIN SECTION */}
         {user?.userType === 'admin' && (
           <div>
-            <div className="px-3 mb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              System Admin
+            <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-purple-600 uppercase tracking-wider">
+              <span>System Admin</span>
+              <span className="w-2 h-2 rounded-full bg-purple-600"></span>
             </div>
-            <Link
-              href="/admin"
-              className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                pathname === '/admin'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <ShieldCheck size={18} />
-              <span>Admin Panel</span>
-            </Link>
+            <div className="space-y-1">
+              {adminItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         )}
       </nav>

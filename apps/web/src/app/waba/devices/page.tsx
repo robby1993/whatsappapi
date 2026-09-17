@@ -1,9 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Smartphone, Plus, Trash2, CheckCircle2, ShieldCheck, Zap, Sparkles, Sliders, ExternalLink, Facebook } from 'lucide-react';
+import {
+  Smartphone,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  ShieldCheck,
+  Zap,
+  Sparkles,
+  Sliders,
+  ExternalLink,
+  Facebook,
+  MoreVertical,
+  RefreshCw,
+  Send
+} from 'lucide-react';
+import Link from 'next/link';
 
 interface Device {
   id: number;
@@ -19,6 +34,7 @@ export default function WabaDevicesPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'embedded' | 'manual'>('embedded');
   const [systemMetaAppId, setSystemMetaAppId] = useState('');
+  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
 
   // Manual Form State
   const [phone, setPhone] = useState('');
@@ -27,18 +43,19 @@ export default function WabaDevicesPage() {
   const [accessToken, setAccessToken] = useState('');
   const [adding, setAdding] = useState(false);
 
+  const menuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     fetchDevices();
     fetchSystemMetaConfig();
 
-    // Check if returning from Meta OAuth redirect code
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      if (code) {
-        handleProcessMetaCode(code);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenuId(null);
       }
-    }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchSystemMetaConfig = async () => {
@@ -85,7 +102,6 @@ export default function WabaDevicesPage() {
     }
   };
 
-  // Launch Meta Embedded Signup OAuth Flow (using Admin Configured Meta App ID)
   const handleLaunchEmbeddedSignup = () => {
     const appIdToUse = systemMetaAppId.trim() || process.env.NEXT_PUBLIC_META_APP_ID || '';
 
@@ -104,6 +120,23 @@ export default function WabaDevicesPage() {
       toast('Meta Embedded Signup window opened. Please complete login.');
     } else {
       toast.error('Popup blocked. Please allow popups for localhost.');
+    }
+  };
+
+  const handleSyncTemplates = async (deviceId: number) => {
+    setActiveMenuId(null);
+    toast.loading('Syncing Meta Templates...');
+    try {
+      const res = await api.post('/waba/templates/sync', { deviceId });
+      toast.dismiss();
+      if (res.data?.status) {
+        toast.success('Templates synced from Meta Graph API!');
+      } else {
+        toast.error('Failed to sync templates');
+      }
+    } catch (err: any) {
+      toast.dismiss();
+      toast.error(err.response?.data?.message || 'Error syncing templates');
     }
   };
 
@@ -141,6 +174,7 @@ export default function WabaDevicesPage() {
   };
 
   const handleDeleteDevice = async (id: number) => {
+    setActiveMenuId(null);
     if (!confirm('Are you sure you want to remove this Meta WABA device?')) return;
     try {
       await api.delete(`/waba/devices/${id}`);
@@ -154,7 +188,7 @@ export default function WabaDevicesPage() {
   if (loading) return <div className="flex items-center justify-center h-full">Loading WABA devices...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-4">
+    <div className="max-w-5xl mx-auto space-y-8 py-4" ref={menuRef}>
       <div>
         <h2 className="text-3xl font-bold text-gray-900">Meta WABA Devices</h2>
         <p className="text-gray-600 mt-1">Connect and manage official Meta WhatsApp Business API accounts</p>
@@ -309,7 +343,7 @@ export default function WabaDevicesPage() {
             </div>
           ) : (
             devices.map((d) => (
-              <div key={d.id} className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between space-y-4">
+              <div key={d.id} className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between space-y-4 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="p-3 rounded-xl bg-blue-100 text-blue-700">
@@ -320,21 +354,62 @@ export default function WabaDevicesPage() {
                       <p className="text-xs text-gray-400 font-mono">ID: {d.phoneNumberId}</p>
                     </div>
                   </div>
-                  <span className="px-2.5 py-1 bg-green-50 text-green-700 font-bold text-xs rounded-full flex items-center gap-1">
-                    <CheckCircle2 size={12} /> Active
-                  </span>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2.5 py-1 bg-green-50 text-green-700 font-bold text-xs rounded-full flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Active
+                    </span>
+
+                    {/* 3-DOT ACTION MENU */}
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === d.id ? null : d.id);
+                        }}
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Device Actions"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+
+                      {/* FLOATING ACTION DROPDOWN */}
+                      {activeMenuId === d.id && (
+                        <div className="absolute right-0 top-8 z-50 w-48 bg-white rounded-xl shadow-xl border p-1 space-y-1 text-left">
+                          <button
+                            onClick={() => handleSyncTemplates(d.id)}
+                            className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
+                          >
+                            <RefreshCw size={15} />
+                            <span>Sync Meta Templates</span>
+                          </button>
+
+                          <Link
+                            href="/waba/dynamic-message"
+                            className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <Send size={15} />
+                            <span>Send Template Msg</span>
+                          </Link>
+
+                          <div className="border-t pt-1">
+                            <button
+                              onClick={() => handleDeleteDevice(d.id)}
+                              className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 size={15} />
+                              <span>Remove Device</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
                 <div className="pt-3 border-t text-xs text-gray-500 space-y-1">
                   <p><span className="font-semibold">WABA Account ID:</span> {d.wabaAccountId}</p>
                   <p><span className="font-semibold">Quality Rating:</span> <span className="text-emerald-600 font-bold">{d.qualityRating}</span></p>
-                </div>
-                <div className="pt-2 text-right">
-                  <button
-                    onClick={() => handleDeleteDevice(d.id)}
-                    className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1"
-                  >
-                    <Trash2 size={14} /> Remove Device
-                  </button>
                 </div>
               </div>
             ))
