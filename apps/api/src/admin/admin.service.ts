@@ -41,12 +41,6 @@ export class AdminService {
   }
 
   async updateUser(number: string, data: any) {
-    if (data.validDays !== undefined) {
-      const newDays = parseInt(data.validDays);
-      const newExpiry = new Date(Date.now() + (newDays * 86400000));
-      data.subscriptionExpiry = newExpiry;
-      data.validDays = newDays;
-    }
     const [updated] = await this.userModel.update(data, { where: { number } });
     if (!updated) return null;
     return await this.userModel.findOne({ where: { number } });

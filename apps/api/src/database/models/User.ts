@@ -43,34 +43,10 @@ export class User extends Model<User> {
   validDays: number;
 
   @Column({
-    type: DataType.DATE,
-    allowNull: true,
-  })
-  subscriptionExpiry: Date;
-
-  @Column({
     type: DataType.BOOLEAN,
     defaultValue: true,
   })
   isActive: boolean;
-
-  @Column({
-    type: DataType.BOOLEAN,
-    defaultValue: true,
-  })
-  allowWebBaileys: boolean;
-
-  @Column({
-    type: DataType.BOOLEAN,
-    defaultValue: true,
-  })
-  allowWaba: boolean;
-
-  @Column({
-    type: DataType.BOOLEAN,
-    defaultValue: true,
-  })
-  allowRcs: boolean;
 
   @Column({
     type: DataType.STRING,

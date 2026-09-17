@@ -8,7 +8,6 @@ import { QueuedMessage } from '../database/models/QueuedMessage';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
-import { User } from '../database/models/User';
 
 @Injectable()
 export class TasksService {
@@ -24,35 +23,7 @@ export class TasksService {
     private messageLogModel: typeof MessageLog,
     @InjectModel(Stat)
     private statModel: typeof Stat,
-    @InjectModel(User)
-    private userModel: typeof User,
   ) {}
-
-  @Interval(60000) // Every 60 seconds
-  async syncUserSubscriptionDays() {
-    try {
-      const users = await this.userModel.findAll({ where: { userType: 'user' } });
-      const now = Date.now();
-
-      for (const u of users) {
-        const expiryTime = u.subscriptionExpiry
-          ? new Date(u.subscriptionExpiry).getTime()
-          : (u.createdAt ? new Date(u.createdAt).getTime() : now) + (u.validDays * 86400000);
-
-        const newExpiryDate = u.subscriptionExpiry || new Date(expiryTime);
-        const remainingDays = Math.max(0, Math.ceil((expiryTime - now) / (1000 * 60 * 60 * 24)));
-
-        if (u.validDays !== remainingDays || !u.subscriptionExpiry) {
-          await u.update({
-            validDays: remainingDays,
-            subscriptionExpiry: newExpiryDate,
-          });
-        }
-      }
-    } catch (err) {
-      this.logger.error('Subscription Sync Error:', err.message);
-    }
-  }
 
   @Interval(5000) // Every 5 seconds
   async processQueue() {

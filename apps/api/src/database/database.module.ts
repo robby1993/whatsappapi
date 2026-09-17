@@ -17,11 +17,6 @@ import { WabaTemplate } from './models/WabaTemplate';
 import { WabaCampaign } from './models/WabaCampaign';
 import { WabaAutomation } from './models/WabaAutomation';
 import { WabaFlow } from './models/WabaFlow';
-import { RcsAgent } from './models/RcsAgent';
-import { RcsTemplate } from './models/RcsTemplate';
-import { RcsCampaign } from './models/RcsCampaign';
-import { RcsAutomation } from './models/RcsAutomation';
-import { RcsFlow } from './models/RcsFlow';
 
 @Module({
   imports: [
@@ -56,11 +51,6 @@ import { RcsFlow } from './models/RcsFlow';
             WabaCampaign,
             WabaAutomation,
             WabaFlow,
-            RcsAgent,
-            RcsTemplate,
-            RcsCampaign,
-            RcsAutomation,
-            RcsFlow,
           ],
           autoLoadModels: true,
           synchronize: true,
@@ -98,11 +88,6 @@ import { RcsFlow } from './models/RcsFlow';
       WabaCampaign,
       WabaAutomation,
       WabaFlow,
-      RcsAgent,
-      RcsTemplate,
-      RcsCampaign,
-      RcsAutomation,
-      RcsFlow,
     ]),
   ],
   exports: [SequelizeModule],

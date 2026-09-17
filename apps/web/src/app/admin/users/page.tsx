@@ -15,12 +15,7 @@ import {
   MoreVertical,
   Clock,
   UserCheck,
-  UserX,
-  Sliders,
-  Check,
-  Zap,
-  Smartphone,
-  MessageSquare
+  UserX
 } from 'lucide-react';
 
 export default function AdminUsersPage() {
@@ -28,13 +23,6 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
-
-  // Channel Access Permission Modal State
-  const [selectedUserForChannels, setSelectedUserForChannels] = useState<any | null>(null);
-  const [allowWebBaileys, setAllowWebBaileys] = useState(true);
-  const [allowWaba, setAllowWaba] = useState(true);
-  const [allowRcs, setAllowRcs] = useState(true);
-  const [savingChannels, setSavingChannels] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -60,39 +48,6 @@ export default function AdminUsersPage() {
       toast.error('Failed to fetch users');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openChannelModal = (user: any) => {
-    setActiveMenuId(null);
-    setSelectedUserForChannels(user);
-    setAllowWebBaileys(user.allowWebBaileys !== false);
-    setAllowWaba(user.allowWaba !== false);
-    setAllowRcs(user.allowRcs !== false);
-  };
-
-  const handleSaveChannels = async () => {
-    if (!selectedUserForChannels) return;
-    setSavingChannels(true);
-    try {
-      const res = await api.post('/admin/update-user', {
-        number: selectedUserForChannels.number,
-        allowWebBaileys,
-        allowWaba,
-        allowRcs,
-      });
-
-      if (res.data?.status) {
-        toast.success(`Channel permissions updated for ${selectedUserForChannels.name}!`);
-        setSelectedUserForChannels(null);
-        fetchUsers();
-      } else {
-        toast.error('Failed to update channel permissions');
-      }
-    } catch (err) {
-      toast.error('Error updating permissions');
-    } finally {
-      setSavingChannels(false);
     }
   };
 
@@ -154,7 +109,7 @@ export default function AdminUsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold text-gray-900">User Management</h2>
-          <p className="text-gray-600 mt-1">Manage user accounts, block/unblock, and channel access permissions</p>
+          <p className="text-gray-600 mt-1">Manage user accounts, block/unblock, and extend plan validity</p>
         </div>
 
         {/* Search Bar */}
@@ -170,94 +125,6 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* CHANNEL ACCESS PERMISSION MODAL */}
-      {selectedUserForChannels && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
-            <div className="border-b pb-3">
-              <h3 className="text-lg font-bold text-gray-900">Channel Access Permissions</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Enable or hide messaging sections for <span className="font-bold text-gray-900">+{selectedUserForChannels.number}</span>
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <label className="flex items-center justify-between p-3.5 border rounded-xl hover:bg-emerald-50/50 cursor-pointer">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
-                    <Zap size={18} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">WhatsApp Web (Baileys)</p>
-                    <p className="text-[11px] text-gray-500">Enable Baileys multi-account section</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={allowWebBaileys}
-                  onChange={(e) => setAllowWebBaileys(e.target.checked)}
-                  className="w-5 h-5 accent-emerald-600 rounded"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3.5 border rounded-xl hover:bg-blue-50/50 cursor-pointer">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                    <Smartphone size={18} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">WhatsApp Business API (Meta)</p>
-                    <p className="text-[11px] text-gray-500">Enable Meta Cloud API section</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={allowWaba}
-                  onChange={(e) => setAllowWaba(e.target.checked)}
-                  className="w-5 h-5 accent-blue-600 rounded"
-                />
-              </label>
-
-              <label className="flex items-center justify-between p-3.5 border rounded-xl hover:bg-indigo-50/50 cursor-pointer">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
-                    <MessageSquare size={18} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">RCS Business Messaging (Google)</p>
-                    <p className="text-[11px] text-gray-500">Enable Google RCS section</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={allowRcs}
-                  onChange={(e) => setAllowRcs(e.target.checked)}
-                  className="w-5 h-5 accent-indigo-600 rounded"
-                />
-              </label>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setSelectedUserForChannels(null)}
-                className="px-4 py-2 border rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveChannels}
-                disabled={savingChannels}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow"
-              >
-                {savingChannels ? 'Saving...' : 'Save Permissions'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="bg-white rounded-2xl border shadow-sm overflow-visible">
         <div className="overflow-x-visible">
           <table className="w-full text-left">
@@ -265,7 +132,7 @@ export default function AdminUsersPage() {
               <tr>
                 <th className="px-6 py-4">User Details</th>
                 <th className="px-6 py-4">Role</th>
-                <th className="px-6 py-4">Allowed Sections</th>
+                <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Subscription</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -293,28 +160,17 @@ export default function AdminUsersPage() {
                         {u.userType}
                       </span>
                     </td>
-
-                    {/* ALLOWED SECTIONS BADGES */}
                     <td className="px-6 py-4">
-                      <div className="flex items-center space-x-1.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          u.allowWebBaileys !== false ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-400 line-through'
-                        }`}>
-                          WA Web
+                      {u.isActive ? (
+                        <span className="inline-flex items-center text-green-600 text-xs font-bold bg-green-50 px-2.5 py-1 rounded-full">
+                          <CheckCircle2 size={14} className="mr-1" /> Active
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          u.allowWaba !== false ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-400 line-through'
-                        }`}>
-                          WABA
+                      ) : (
+                        <span className="inline-flex items-center text-red-500 text-xs font-bold bg-red-50 px-2.5 py-1 rounded-full">
+                          <XCircle size={14} className="mr-1" /> Blocked
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          u.allowRcs !== false ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-gray-100 text-gray-400 line-through'
-                        }`}>
-                          RCS
-                        </span>
-                      </div>
+                      )}
                     </td>
-
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
                         <Calendar size={14} className="text-gray-400" />
@@ -339,15 +195,7 @@ export default function AdminUsersPage() {
 
                       {/* FLOATING ACTION DROPDOWN */}
                       {activeMenuId === u.id && (
-                        <div className="absolute right-6 top-12 z-50 w-56 bg-white rounded-xl shadow-xl border p-1 space-y-1 text-left">
-                          <button
-                            onClick={() => openChannelModal(u)}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-purple-700 hover:bg-purple-50 transition-colors"
-                          >
-                            <Sliders size={16} />
-                            <span>Channel Access Permissions</span>
-                          </button>
-
+                        <div className="absolute right-6 top-12 z-50 w-52 bg-white rounded-xl shadow-xl border p-1 space-y-1 text-left">
                           <button
                             onClick={() => toggleUserStatus(u.number, u.isActive, u.validDays)}
                             className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
