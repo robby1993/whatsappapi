@@ -35,6 +35,28 @@ export class RcsService {
     });
   }
 
+  async autoProvisionAgent(userNumber: string, data: { brandName: string; category?: string; phone: string; logoUrl?: string }) {
+    const cleanPhone = (data.phone || userNumber).replace(/\D/g, '');
+    const agentSlug = data.brandName.toLowerCase().replace(/\s+/g, '_') + '_' + cleanPhone.slice(-4);
+    const generatedAgentId = `${agentSlug}@rbm.goog`;
+
+    return await this.rcsAgentModel.create({
+      userNumber,
+      agentName: data.brandName,
+      agentId: generatedAgentId,
+      serviceAccountJson: JSON.stringify({
+        type: 'service_account',
+        project_id: `rcs-auto-${agentSlug}`,
+        client_email: `${agentSlug}@rcs-partner.iam.gserviceaccount.com`,
+        auto_provisioned: true,
+        logo_url: data.logoUrl || '',
+        category: data.category || 'RETAIL',
+        webhook_url: `${process.env.API_URL || 'http://localhost:5001'}/api/rcs/webhook`
+      }),
+      status: 'active',
+    });
+  }
+
   async deleteAgent(userNumber: string, id: number) {
     await this.rcsAgentModel.destroy({ where: { id, userNumber } });
     return true;

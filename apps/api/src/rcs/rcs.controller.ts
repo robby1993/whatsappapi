@@ -20,6 +20,12 @@ export class RcsController {
     return { message: 'RCS agent created', result };
   }
 
+  @Post('agents/auto-provision')
+  async autoProvisionAgent(@Body() body: any, @Req() req: any) {
+    const result = await this.rcsService.autoProvisionAgent(req.userNumber, body);
+    return { message: 'RCS agent provisioned automatically', result };
+  }
+
   @Delete('agents/:id')
   async deleteAgent(@Param('id') id: number, @Req() req: any) {
     await this.rcsService.deleteAgent(req.userNumber, id);
