@@ -6,6 +6,7 @@ import './globals.css';
 import { useAuthStore } from '@/store/authStore';
 import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import Header from '@/components/Header';
 import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -44,9 +45,12 @@ export default function RootLayout({
         ) : (
           <div className="flex h-screen overflow-hidden">
             <Sidebar />
-            <main className="flex-1 overflow-y-auto p-8">
-              {children}
-            </main>
+            <div className="flex-1 flex flex-col h-screen overflow-hidden">
+              <Header />
+              <main className="flex-1 overflow-y-auto p-8 bg-gray-50/50">
+                {children}
+              </main>
+            </div>
           </div>
         )}
       </body>

@@ -112,8 +112,10 @@ export class UsersService {
         // Automatically activate admin accounts upon valid login
         await user.update({ isActive: true });
       } else {
-        const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
-        const expiryTime = createdAtTime + (user.validDays * 86400000);
+        const expiryTime = user.subscriptionExpiry
+          ? new Date(user.subscriptionExpiry).getTime()
+          : (user.createdAt ? new Date(user.createdAt).getTime() : Date.now()) + (user.validDays * 86400000);
+
         const isExpired = Date.now() > expiryTime || user.validDays <= 0;
 
         if (!isExpired) {
@@ -167,11 +169,16 @@ export class UsersService {
       delete profile.password;
 
       if (user.userType !== 'admin') {
-        const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
-        const expiryTime = createdAtTime + (user.validDays * 86400000);
-        isExpired = Date.now() > expiryTime || !user.isActive;
-        daysRemaining = Math.max(0, Math.ceil((expiryTime - Date.now()) / 86400000));
+        const expiryTime = user.subscriptionExpiry
+          ? new Date(user.subscriptionExpiry).getTime()
+          : (user.createdAt ? new Date(user.createdAt).getTime() : Date.now()) + (user.validDays * 86400000);
+
+        const diffMs = expiryTime - Date.now();
+        daysRemaining = Math.max(0, Math.ceil(diffMs / 86400000));
+        isExpired = daysRemaining <= 0 || !user.isActive;
+
         profile.validDays = daysRemaining;
+        profile.subscriptionExpiry = new Date(expiryTime);
       } else {
         daysRemaining = 3650;
         isExpired = false;
@@ -188,6 +195,7 @@ export class UsersService {
       daysRemaining,
       plans,
       profile,
+      user: profile,
       recentLogs,
     };
   }
@@ -209,29 +217,30 @@ export class UsersService {
     const user = await this.userModel.findOne({ where: { number: userNumber, userType } });
     if (!user) throw new NotFoundException('User account not found');
 
-    const createdAtTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
-    const currentExpiry = createdAtTime + (user.validDays * 86400000);
+    const currentExpiry = user.subscriptionExpiry
+      ? new Date(user.subscriptionExpiry).getTime()
+      : (user.createdAt ? new Date(user.createdAt).getTime() : Date.now()) + (user.validDays * 86400000);
 
-    let newValidDays = user.validDays;
-    let newCreatedAt = user.createdAt;
-
+    let newExpiryTime = 0;
     if (Date.now() < currentExpiry) {
-      newValidDays += plan.days;
+      newExpiryTime = currentExpiry + (plan.days * 86400000);
     } else {
-      newCreatedAt = new Date();
-      newValidDays = plan.days;
+      newExpiryTime = Date.now() + (plan.days * 86400000);
     }
+
+    const newExpiryDate = new Date(newExpiryTime);
+    const newValidDays = Math.max(0, Math.ceil((newExpiryTime - Date.now()) / 86400000));
 
     await user.update({
       validDays: newValidDays,
-      createdAt: newCreatedAt,
+      subscriptionExpiry: newExpiryDate,
       isActive: true
     });
 
     // Record Subscription History
     try {
       const startDate = new Date();
-      const expiryDate = new Date(startDate.getTime() + (plan.days * 86400000));
+      const expiryDate = newExpiryDate;
       await this.subscriptionHistoryModel.create({
         userNumber: user.number,
         userName: user.name || 'User',
