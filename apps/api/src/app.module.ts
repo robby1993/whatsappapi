@@ -11,6 +11,7 @@ import { ChatflowsModule } from './chatflows/chatflows.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AdminModule } from './admin/admin.module';
 import { WabaModule } from './waba/waba.module';
+import { RcsModule } from './rcs/rcs.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -31,6 +32,7 @@ import { AppController } from './app.controller';
     TasksModule,
     AdminModule,
     WabaModule,
+    RcsModule,
   ],
   controllers: [AppController],
 })
