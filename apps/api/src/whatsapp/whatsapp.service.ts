@@ -86,8 +86,8 @@ export class WhatsappService implements OnModuleInit {
           auth: state,
           printQRInTerminal: false,
           browser: Browsers.ubuntu('Chrome'),
-          syncFullHistory: false,
-          shouldSyncHistoryMessage: () => false,
+          syncFullHistory: true,
+          shouldSyncHistoryMessage: () => true,
           connectTimeoutMs: 60000,
           defaultQueryTimeoutMs: 0,
           keepAliveIntervalMs: 30000,
@@ -181,6 +181,24 @@ export class WhatsappService implements OnModuleInit {
         });
 
         sock.ev.on('messages.upsert', (m) => this.incomingMessageHandler.handle(cleanPhone, sock, m));
+
+        (sock.ev as any).on('messaging-history.set', async (history: any) => {
+          console.log(`📜 History Sync (set) received for ${cleanPhone}: ${history.messages?.length || 0} messages`);
+          if (history.messages && history.messages.length > 0) {
+            for (const msg of history.messages) {
+              await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
+            }
+          }
+        });
+
+        (sock.ev as any).on('messaging-history.sync', async (history: any) => {
+          console.log(`📜 History Sync (sync) received for ${cleanPhone}: ${history.messages?.length || 0} messages`);
+          if (history.messages && history.messages.length > 0) {
+            for (const msg of history.messages) {
+              await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
+            }
+          }
+        });
 
         return sock;
       } catch (err) {

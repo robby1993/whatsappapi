@@ -27,15 +27,54 @@ export class IncomingMessageHandler {
   ) {}
 
   /**
+   * Saves historical messages during Baileys full history sync.
+   */
+  async saveHistoryMessage(botPhone: string, msg: any) {
+    try {
+      if (!msg || !msg.message) return;
+      let msgContent = this.unwrapMessage(msg.message);
+      if (!msgContent) return;
+
+      const text = this.extractText(msgContent);
+      if (!text || text.toLowerCase().includes('waiting for this message')) return;
+
+      const senderJid = msg.key?.remoteJid || '';
+      const isFromMe = msg.key?.fromMe;
+
+      const cleanRemote = (senderJid || '').replace(/@.*$/, '').replace(/\D/g, '');
+      const cleanBotPhone = (botPhone || '').replace(/\D/g, '');
+
+      if (!cleanRemote || cleanRemote.length < 10 || cleanRemote.length > 13 || cleanRemote.startsWith('1203')) return;
+
+      const sender = isFromMe ? cleanBotPhone : cleanRemote;
+      const receiver = isFromMe ? cleanRemote : cleanBotPhone;
+      const status = isFromMe ? 'sent' : 'received';
+      const msgId = msg.key?.id || `hist_${Date.now()}_${Math.random()}`;
+
+      const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
+      if (!existing) {
+        await this.messageLogModel.create({
+          sender,
+          receiver,
+          message: text,
+          status,
+          messageId: msgId,
+          timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
+        });
+      }
+    } catch (e) {
+      // Ignore single history message save error
+    }
+  }
+
+  /**
    * Main entry point for processing incoming messages.
    */
   async handle(botPhone: string, sock: any, m: any) {
     try {
-      if (!m.messages || m.type !== 'notify') return;
+      if (!m.messages || m.messages.length === 0) return;
 
       for (const msg of m.messages) {
-        if (msg.key.fromMe) continue;
-
         let msgContent = msg.message;
         if (!msgContent) continue;
 
@@ -43,27 +82,36 @@ export class IncomingMessageHandler {
         msgContent = this.unwrapMessage(msgContent);
         if (!msgContent) continue;
 
-        const senderJid = msg.key.remoteJid;
+        const senderJid = msg.key?.remoteJid || '';
         const text = this.extractText(msgContent);
+        const isFromMe = msg.key?.fromMe;
 
         if (!text || text.toLowerCase().includes('waiting for this message')) continue;
-        console.log(`📩 ${botPhone} ← ${senderJid}: "${text}"`);
 
-        // Save incoming received message to MessageLog so it displays in /chats
-        const cleanSender = (senderJid || '').replace(/@.*$/, '').replace(/\D/g, '');
+        const cleanRemote = (senderJid || '').replace(/@.*$/, '').replace(/\D/g, '');
         const cleanBotPhone = (botPhone || '').replace(/\D/g, '');
 
-        if (cleanSender && cleanBotPhone && cleanSender.length >= 10 && cleanSender.length <= 13) {
-          await this.messageLogModel.create({
-            sender: cleanSender,
-            receiver: cleanBotPhone,
-            message: text,
-            status: 'received',
-            messageId: msg.key.id || `inc_${Date.now()}`,
-            timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
-          });
-          console.log(`💾 Saved incoming received message: ${cleanSender} → ${cleanBotPhone}`);
+        if (cleanRemote && cleanRemote.length >= 10 && cleanRemote.length <= 13 && !cleanRemote.startsWith('1203')) {
+          const sender = isFromMe ? cleanBotPhone : cleanRemote;
+          const receiver = isFromMe ? cleanRemote : cleanBotPhone;
+          const status = isFromMe ? 'sent' : 'received';
+          const msgId = msg.key?.id || `msg_${Date.now()}`;
+
+          const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
+          if (!existing) {
+            await this.messageLogModel.create({
+              sender,
+              receiver,
+              message: text,
+              status,
+              messageId: msgId,
+              timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
+            });
+            console.log(`💾 Saved message (${status}): ${sender} → ${receiver} ("${text.slice(0, 30)}")`);
+          }
         }
+
+        if (isFromMe) continue;
 
         // 0. Handle Global Commands (Exit/Restart)
         if (this.isGlobalCommand(text)) {
