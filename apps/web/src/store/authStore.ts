@@ -1,10 +1,13 @@
 import { create } from 'zustand';
+import api from '@/lib/api';
 
 interface User {
   number: string;
   name: string;
   userType: 'admin' | 'user';
   isActive: boolean;
+  validDays?: number;
+  gender?: string;
 }
 
 interface AuthState {
@@ -13,10 +16,11 @@ interface AuthState {
   initialized: boolean;
   setAuth: (user: User, token: string) => void;
   logout: () => void;
-  init: () => void;
+  init: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   initialized: false,
@@ -30,13 +34,28 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('user_data');
     set({ user: null, token: null, initialized: true });
   },
-  init: () => {
+  refreshUser: async () => {
+    try {
+      const res = await api.get('/users/dashboard');
+      if (res.data?.status && res.data?.result?.user) {
+        const updatedUser = res.data.result.user;
+        localStorage.setItem('user_data', JSON.stringify(updatedUser));
+        set({ user: updatedUser });
+      }
+    } catch (err) {
+      // Ignore refresh errors
+    }
+  },
+  init: async () => {
     const token = localStorage.getItem('auth_token');
     const userData = localStorage.getItem('user_data');
 
     if (token && userData) {
       try {
-        set({ user: JSON.parse(userData), token, initialized: true });
+        const parsedUser = JSON.parse(userData);
+        set({ user: parsedUser, token, initialized: true });
+        // Fetch fresh user profile in background
+        get().refreshUser();
       } catch (e) {
         set({ user: null, token: null, initialized: true });
       }
