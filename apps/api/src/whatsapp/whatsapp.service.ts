@@ -170,6 +170,9 @@ export class WhatsappService implements OnModuleInit {
             } else if (reason === 515 || reason === DisconnectReason.restartRequired) {
               console.log(`🔄 Restart required (${reason}) for ${cleanPhone}, reconnecting now...`);
               setTimeout(() => this.initWhatsApp(cleanPhone).catch(() => {}), 1000);
+            } else if (reason === DisconnectReason.connectionReplaced || reason === 440) {
+              console.log(`⚠️ Connection conflict (440) for ${cleanPhone}: Session opened on another server/instance. Pausing auto-reconnect to prevent conflict loop.`);
+              this.sessionStatus.set(cleanPhone, { ...status, status: 'disconnected', reason: 'Connection conflict (440)' });
             } else {
               this.sessionStatus.set(cleanPhone, { ...status, status: 'disconnected' });
               setTimeout(() => this.initWhatsApp(cleanPhone), 5000);
