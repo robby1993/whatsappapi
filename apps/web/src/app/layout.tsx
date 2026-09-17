@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { useAuthStore } from '@/store/authStore';
@@ -17,6 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const { init, user, initialized } = useAuthStore();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -43,11 +44,14 @@ export default function RootLayout({
         ) : isAuthPage ? (
           children
         ) : (
-          <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <div className="flex-1 flex flex-col h-screen overflow-hidden">
-              <Header />
-              <main className="flex-1 overflow-y-auto p-8 bg-gray-50/50">
+          <div className="flex h-screen overflow-hidden bg-gray-50">
+            <Sidebar
+              isOpenMobile={isMobileOpen}
+              onCloseMobile={() => setIsMobileOpen(false)}
+            />
+            <div className="flex-1 flex flex-col h-screen overflow-hidden w-full">
+              <Header onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)} />
+              <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50/50">
                 {children}
               </main>
             </div>
