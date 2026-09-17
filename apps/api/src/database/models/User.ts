@@ -55,6 +55,24 @@ export class User extends Model<User> {
   isActive: boolean;
 
   @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: true,
+  })
+  allowWebBaileys: boolean;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: true,
+  })
+  allowWaba: boolean;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: true,
+  })
+  allowRcs: boolean;
+
+  @Column({
     type: DataType.STRING,
     allowNull: true,
   })

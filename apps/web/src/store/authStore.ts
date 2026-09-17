@@ -9,6 +9,9 @@ interface User {
   validDays?: number;
   gender?: string;
   subscriptionExpiry?: string;
+  allowWebBaileys?: boolean;
+  allowWaba?: boolean;
+  allowRcs?: boolean;
 }
 
 interface AuthState {

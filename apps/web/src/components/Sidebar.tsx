@@ -22,8 +22,7 @@ import {
   Users,
   Settings,
   Database,
-  Key,
-  MessageSquareCode
+  Key
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
@@ -71,6 +70,10 @@ const Sidebar = () => {
     { name: 'Database Backup', path: '/admin/backup', icon: Database },
   ];
 
+  const showWebBaileys = user?.allowWebBaileys !== false;
+  const showWaba = user?.allowWaba !== false;
+  const showRcs = user?.allowRcs !== false;
+
   return (
     <div className="w-64 bg-white h-screen border-r flex flex-col shadow-sm">
       <div className="p-6 border-b flex items-center justify-between">
@@ -82,88 +85,94 @@ const Sidebar = () => {
 
       <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
         {/* SECTION 1: WHATSAPP WEB (BAILEYS) */}
-        <div>
-          <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-            <span>WhatsApp Web (Baileys)</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+        {showWebBaileys && (
+          <div>
+            <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span>WhatsApp Web (Baileys)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            </div>
+            <div className="space-y-1">
+              {webBaileysItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-emerald-600 text-white shadow'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <div className="space-y-1">
-            {webBaileysItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-emerald-600 text-white shadow'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
         {/* SECTION 2: WHATSAPP BUSINESS API (META CLOUD) */}
-        <div>
-          <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-            <span>WhatsApp Business API</span>
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+        {showWaba && (
+          <div>
+            <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span>WhatsApp Business API</span>
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+            </div>
+            <div className="space-y-1">
+              {wabaItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <div className="space-y-1">
-            {wabaItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
         {/* SECTION 3: RCS BUSINESS MESSAGING API */}
-        <div>
-          <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-            <span>RCS Business Messaging</span>
-            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+        {showRcs && (
+          <div>
+            <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <span>RCS Business Messaging</span>
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+            </div>
+            <div className="space-y-1">
+              {rcsItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <div className="space-y-1">
-            {rcsItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
         {/* SECTION 4: SYSTEM ADMIN SECTION */}
         {user?.userType === 'admin' && (
