@@ -58,11 +58,14 @@ export class WhatsappController {
     }
 
     try {
-      const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
-      console.log(`📡 Requesting pairing code for: ${targetPhone}`);
+      const isAdmin = req.user?.userType === 'admin';
+      const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+      const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+
+      console.log(`📡 Requesting pairing code for: ${targetPhone} (Owner: ${userPhone})`);
 
       await this.whatsappService.forceLogout(targetPhone);
-      const sock = await this.whatsappService.initWhatsApp(targetPhone);
+      const sock = await this.whatsappService.initWhatsApp(targetPhone, userPhone);
 
       // Wait for socket to be ready
       await new Promise((r) => setTimeout(r, 6000));
@@ -91,9 +94,12 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
+    const isAdmin = req.user?.userType === 'admin';
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+
     await this.whatsappService.forceLogout(targetPhone);
-    await this.whatsappService.initWhatsApp(targetPhone);
+    await this.whatsappService.initWhatsApp(targetPhone, userPhone);
 
     // Poll for QR
     for (let i = 0; i < 30; i++) {
@@ -109,10 +115,28 @@ export class WhatsappController {
   @Get('user-sessions')
   async getUserSessions(@Req() req: any) {
     try {
-      const dbSessions = await this.sessionModel.findAll({
-        where: { dataType: 'creds', dataId: 'base' },
-        attributes: ['phone']
-      });
+      const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+      const isAdmin = req.user?.userType === 'admin';
+
+      let dbSessions = [];
+      if (isAdmin) {
+        dbSessions = await this.sessionModel.findAll({
+          where: { dataType: 'creds', dataId: 'base' },
+          attributes: ['phone', 'userNumber']
+        });
+      } else {
+        dbSessions = await this.sessionModel.findAll({
+          where: {
+            dataType: 'creds',
+            dataId: 'base',
+            [Op.or]: [
+              { userNumber: userPhone },
+              { phone: userPhone }
+            ]
+          },
+          attributes: ['phone', 'userNumber']
+        });
+      }
 
       const activeSessions = [];
       const dbPhones = new Set<string>();
@@ -132,18 +156,6 @@ export class WhatsappController {
         });
       }
 
-      for (const [phone, status] of this.whatsappService.sessionStatus.entries()) {
-        const cleanPhone = String(phone).replace(/\D/g, '');
-        if (cleanPhone && !dbPhones.has(cleanPhone)) {
-          activeSessions.push({
-            phone: cleanPhone,
-            status: status.status || 'connecting',
-            qr: status.qr || null,
-            pairingCode: status.pairingCode || null
-          });
-        }
-      }
-
       return { message: 'User sessions fetched', result: activeSessions };
     } catch (err: any) {
       console.error('❌ Error fetching user sessions:', err.message);
@@ -153,7 +165,10 @@ export class WhatsappController {
 
   @Get('session-status')
   async getSessionStatus(@Query('phone') phone: string, @Req() req: any) {
-    const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
+    const isAdmin = req.user?.userType === 'admin';
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+
     const status = this.whatsappService.getStatus(targetPhone);
     return { message: 'Status fetched', result: { ...status, phone: targetPhone } };
   }
@@ -171,7 +186,10 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
+    const isAdmin = req.user?.userType === 'admin';
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const sender = (!isAdmin || !body.from ? userPhone : body.from).toString().replace(/\D/g, '');
+
     const sock = this.whatsappService.sessions.get(sender);
 
     if (!sock || this.whatsappService.getStatus(sender).status !== 'connected') {
@@ -216,7 +234,10 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
+    const isAdmin = req.user?.userType === 'admin';
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const sender = (!isAdmin || !body.from ? userPhone : body.from).toString().replace(/\D/g, '');
+
     try {
       const results = await this.whatsappService.broadcast(
         sender,
@@ -235,7 +256,10 @@ export class WhatsappController {
 
   @Post('logout')
   async logout(@Body('phone') phone: string, @Req() req: any) {
-    const targetPhone = (phone || req.userNumber).toString().replace(/\D/g, '');
+    const isAdmin = req.user?.userType === 'admin';
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+
     await this.whatsappService.forceLogout(targetPhone);
     return { message: 'Logged out successfully' };
   }
@@ -246,7 +270,10 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const sender = (body.from || req.userNumber).toString().replace(/\D/g, '');
+    const isAdmin = req.user?.userType === 'admin';
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const sender = (!isAdmin || !body.from ? userPhone : body.from).toString().replace(/\D/g, '');
+
     const cleanReceiver = body.phone.replace(/\D/g, '');
 
     const timeInMs = typeof body.scheduleTime === 'number'
@@ -273,13 +300,14 @@ export class WhatsappController {
   @Get('scheduled-messages')
   async getScheduledMessages(@Req() req: any) {
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-    const activePhones = Array.from(this.whatsappService.sessions.keys()).map(p => p.replace(/\D/g, ''));
-    const phoneFilter = Array.from(new Set([userPhone, ...activePhones])).filter(Boolean);
+    const isAdmin = req.user?.userType === 'admin';
+
+    const whereCondition = isAdmin
+      ? {}
+      : { sender: userPhone };
 
     const scheduled = await this.scheduledMessageModel.findAll({
-      where: {
-        sender: { [Op.in]: phoneFilter }
-      },
+      where: whereCondition,
       order: [['scheduleTime', 'ASC']]
     });
 

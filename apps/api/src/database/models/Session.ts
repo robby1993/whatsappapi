@@ -27,6 +27,12 @@ export class Session extends Model<Session> {
   dataId: string;
 
   @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  userNumber: string;
+
+  @Column({
     type: DataType.TEXT,
     allowNull: true,
   })

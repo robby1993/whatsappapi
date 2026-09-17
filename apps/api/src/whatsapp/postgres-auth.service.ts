@@ -12,9 +12,12 @@ export class PostgresAuthService {
     private sessionModel: typeof Session,
   ) {}
 
-  async getAuthState(phone: string): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> {
+  async getAuthState(phone: string, ownerUserNumber?: string): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanOwner = ownerUserNumber ? ownerUserNumber.replace(/\D/g, '') : cleanPhone;
+
     const writeData = async (data: any, type: string, id: string) => {
-      const queueKey = `${phone}:${type}:${id}`;
+      const queueKey = `${cleanPhone}:${type}:${id}`;
       const previousTask = this.writeQueues.get(queueKey) || Promise.resolve();
 
       const newTask = (async () => {
@@ -23,12 +26,16 @@ export class PostgresAuthService {
           const sData = JSON.stringify(data, BufferJSON.replacer);
 
           const [session, created] = await this.sessionModel.findOrCreate({
-            where: { phone, dataType: type, dataId: id },
-            defaults: { data: sData }
+            where: { phone: cleanPhone, dataType: type, dataId: id },
+            defaults: { data: sData, userNumber: cleanOwner }
           });
 
-          if (!created && session.data !== sData) {
-            await session.update({ data: sData });
+          if (!created) {
+            const updateFields: any = { data: sData };
+            if (cleanOwner && session.userNumber !== cleanOwner) {
+              updateFields.userNumber = cleanOwner;
+            }
+            await session.update(updateFields);
           }
         } catch (err) {
           console.error(`Error writing auth data (${type}/${id}):`, err.message);
@@ -42,7 +49,7 @@ export class PostgresAuthService {
     const readData = async (type: string, id: string) => {
       try {
         const session = await this.sessionModel.findOne({
-          where: { phone, dataType: type, dataId: id },
+          where: { phone: cleanPhone, dataType: type, dataId: id },
         });
         if (!session || !session.data) return null;
         return JSON.parse(session.data, BufferJSON.reviver);
@@ -55,7 +62,7 @@ export class PostgresAuthService {
     const removeData = async (type: string, id: string) => {
       try {
         await this.sessionModel.destroy({
-          where: { phone, dataType: type, dataId: id },
+          where: { phone: cleanPhone, dataType: type, dataId: id },
         });
       } catch (err) {
         console.error(`Error removing auth data (${type}/${id}):`, err.message);
@@ -103,7 +110,6 @@ export class PostgresAuthService {
         },
       },
       saveCreds: async () => {
-        // Ensure we save the latest creds state
         await writeData(creds, 'creds', 'base');
       },
     };

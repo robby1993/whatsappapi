@@ -44,7 +44,7 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  async initWhatsApp(phone: string): Promise<any> {
+  async initWhatsApp(phone: string, ownerUserNumber?: string): Promise<any> {
     const cleanPhone = phone.replace(/\D/g, '');
 
     // Guard against multiple initializations
@@ -71,7 +71,7 @@ export class WhatsappService implements OnModuleInit {
         }
 
         console.log(`🔌 Initializing WhatsApp session: ${cleanPhone}`);
-        const { state, saveCreds } = await this.postgresAuthService.getAuthState(cleanPhone);
+        const { state, saveCreds } = await this.postgresAuthService.getAuthState(cleanPhone, ownerUserNumber);
         console.log(`🔑 Auth State loaded for: ${cleanPhone}`);
 
         // Get version with a faster fallback and retry
