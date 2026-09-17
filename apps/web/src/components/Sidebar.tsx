@@ -36,6 +36,7 @@ const Sidebar = () => {
     { name: 'Send Message', path: '/send-message', icon: Send },
     { name: 'Schedule Message', path: '/schedule-message', icon: Clock },
     { name: 'Broadcast', path: '/broadcast', icon: Radio },
+    { name: 'Automation', path: '/automation', icon: Bot },
     { name: 'Subscription', path: '/subscription', icon: CreditCard },
   ];
 

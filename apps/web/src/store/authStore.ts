@@ -8,6 +8,7 @@ interface User {
   isActive: boolean;
   validDays?: number;
   gender?: string;
+  subscriptionExpiry?: string;
 }
 
 interface AuthState {
@@ -37,10 +38,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   refreshUser: async () => {
     try {
       const res = await api.get('/users/dashboard');
-      if (res.data?.status && res.data?.result?.user) {
-        const updatedUser = res.data.result.user;
-        localStorage.setItem('user_data', JSON.stringify(updatedUser));
-        set({ user: updatedUser });
+      const freshUser = res.data?.result?.user || res.data?.result?.profile;
+      if (res.data?.status && freshUser) {
+        localStorage.setItem('user_data', JSON.stringify(freshUser));
+        set({ user: freshUser });
       }
     } catch (err) {
       // Ignore refresh errors

@@ -43,6 +43,12 @@ export class User extends Model<User> {
   validDays: number;
 
   @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  subscriptionExpiry: Date;
+
+  @Column({
     type: DataType.BOOLEAN,
     defaultValue: true,
   })
