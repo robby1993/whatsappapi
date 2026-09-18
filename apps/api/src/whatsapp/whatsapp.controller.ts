@@ -209,17 +209,20 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
     const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
-    const defaultSender = currentUser?.primaryPhone || userPhone;
+    const primarySender = currentUser?.primaryPhone || userPhone;
 
-    const sender = (!isAdmin || !body.from ? defaultSender : (body.from || defaultSender)).toString().replace(/\D/g, '');
+    let sender = (body.from || primarySender).toString().replace(/\D/g, '');
+    let sock = this.whatsappService.sessions.get(sender);
 
-    const sock = this.whatsappService.sessions.get(sender);
+    if ((!sock || this.whatsappService.getStatus(sender).status !== 'connected') && primarySender !== sender) {
+      sender = primarySender;
+      sock = this.whatsappService.sessions.get(sender);
+    }
 
     if (!sock || this.whatsappService.getStatus(sender).status !== 'connected') {
-      return { status: false, message: `WhatsApp (${sender}) is disconnected.`, result: null };
+      return { status: false, message: `Primary WhatsApp device (+${sender}) is disconnected. Please connect on Connections page.`, result: null };
     }
 
     const jid = body.phone.replace(/\D/g, '') + '@s.whatsapp.net';
@@ -231,7 +234,7 @@ export class WhatsappController {
         return { status: false, message: 'Message content or media is required', result: null };
       }
 
-      console.log(`📤 Sending message to ${jid} from ${sender}...`);
+      console.log(`📤 Sending message to ${jid} from Primary Sender (+${sender})...`);
       const result = await sock.sendMessage(jid, messageOptions);
 
       await this.messageLogModel.create({
@@ -260,12 +263,11 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
     const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
-    const defaultSender = currentUser?.primaryPhone || userPhone;
+    const primarySender = currentUser?.primaryPhone || userPhone;
 
-    const sender = (!isAdmin || !body.from ? defaultSender : (body.from || defaultSender)).toString().replace(/\D/g, '');
+    const sender = (body.from || primarySender).toString().replace(/\D/g, '');
 
     try {
       const results = await this.whatsappService.broadcast(
@@ -299,12 +301,11 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
     const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
-    const defaultSender = currentUser?.primaryPhone || userPhone;
+    const primarySender = currentUser?.primaryPhone || userPhone;
 
-    const sender = (!isAdmin || !body.from ? defaultSender : (body.from || defaultSender)).toString().replace(/\D/g, '');
+    const sender = (body.from || primarySender).toString().replace(/\D/g, '');
     const cleanReceiver = body.phone.replace(/\D/g, '');
 
     const timeInMs = typeof body.scheduleTime === 'number'
