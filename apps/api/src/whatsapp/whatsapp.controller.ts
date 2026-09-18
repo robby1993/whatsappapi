@@ -73,11 +73,10 @@ export class WhatsappController {
     }
 
     try {
-      const isAdmin = req.user?.userType === 'admin';
       const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-      const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+      const targetPhone = (phone || userPhone).toString().replace(/\D/g, '');
 
-      console.log(`📡 Requesting pairing code for: ${targetPhone} (Owner: ${userPhone})`);
+      console.log(`📡 Requesting pairing code for target: ${targetPhone} (Owner Account: ${userPhone})`);
 
       await this.whatsappService.forceLogout(targetPhone);
       const sock = await this.whatsappService.initWhatsApp(targetPhone, userPhone);
@@ -109,9 +108,8 @@ export class WhatsappController {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
 
-    const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-    const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+    const targetPhone = (phone || userPhone).toString().replace(/\D/g, '');
 
     await this.whatsappService.forceLogout(targetPhone);
     await this.whatsappService.initWhatsApp(targetPhone, userPhone);
@@ -136,25 +134,10 @@ export class WhatsappController {
       const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
       const primaryPhone = currentUser?.primaryPhone || userPhone;
 
-      let dbSessions = [];
-      if (isAdmin) {
-        dbSessions = await this.sessionModel.findAll({
-          where: { dataType: 'creds', dataId: 'base' },
-          attributes: ['phone', 'userNumber']
-        });
-      } else {
-        dbSessions = await this.sessionModel.findAll({
-          where: {
-            dataType: 'creds',
-            dataId: 'base',
-            [Op.or]: [
-              { userNumber: userPhone },
-              { phone: userPhone }
-            ]
-          },
-          attributes: ['phone', 'userNumber']
-        });
-      }
+      const dbSessions = await this.sessionModel.findAll({
+        where: { dataType: 'creds', dataId: 'base' },
+        attributes: ['phone', 'userNumber']
+      });
 
       const activeSessions = [];
       const dbPhones = new Set<string>();
@@ -164,32 +147,53 @@ export class WhatsappController {
         const cleanPhone = String(session.phone).replace(/\D/g, '');
         if (!cleanPhone) continue;
 
-        dbPhones.add(cleanPhone);
+        const isOwner = isAdmin || session.userNumber === userPhone || cleanPhone === userPhone;
+        if (!isOwner) continue;
+
         const liveStatus = this.whatsappService.getStatus(cleanPhone);
-        activeSessions.push({
-          phone: cleanPhone,
-          status: liveStatus.status || 'disconnected',
-          isPrimary: cleanPhone === primaryPhone,
-          qr: liveStatus.qr || null,
-          pairingCode: liveStatus.pairingCode || null
-        });
+
+        if (liveStatus.status === 'connected') {
+          dbPhones.add(cleanPhone);
+          activeSessions.push({
+            phone: cleanPhone,
+            status: 'connected',
+            isPrimary: cleanPhone === primaryPhone,
+            qr: null,
+            pairingCode: null
+          });
+        }
       }
 
-      return { message: 'User sessions fetched', result: activeSessions };
+      // Check live in-memory active sockets for this user
+      for (const [phone, status] of this.whatsappService.sessionStatus.entries()) {
+        const cleanPhone = String(phone).replace(/\D/g, '');
+        if (!cleanPhone || dbPhones.has(cleanPhone)) continue;
+
+        if (status.status === 'connected') {
+          activeSessions.push({
+            phone: cleanPhone,
+            status: 'connected',
+            isPrimary: cleanPhone === primaryPhone,
+            qr: null,
+            pairingCode: null
+          });
+        }
+      }
+
+      return { status: true, message: 'User sessions fetched', result: activeSessions };
     } catch (err: any) {
       console.error('❌ Error fetching user sessions:', err.message);
-      return { message: 'Failed to fetch sessions', result: [] };
+      return { status: false, message: 'Failed to fetch sessions', result: [] };
     }
   }
 
   @Get('session-status')
   async getSessionStatus(@Query('phone') phone: string, @Req() req: any) {
-    const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-    const targetPhone = (!isAdmin || !phone ? userPhone : phone).toString().replace(/\D/g, '');
+    const targetPhone = (phone || userPhone).toString().replace(/\D/g, '');
 
     const status = this.whatsappService.getStatus(targetPhone);
-    return { message: 'Status fetched', result: { ...status, phone: targetPhone } };
+    return { status: true, message: 'Status fetched', result: { ...status, phone: targetPhone } };
   }
 
   @Get('sessions')

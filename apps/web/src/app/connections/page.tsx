@@ -16,7 +16,6 @@ import {
   Star,
   Zap,
   Globe,
-  Radio,
   Wifi
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -26,8 +25,6 @@ interface SessionAccount {
   phone: string;
   status: string;
   isPrimary?: boolean;
-  qr?: string | null;
-  pairingCode?: string | null;
   updatedAt?: string;
 }
 
@@ -39,47 +36,74 @@ export default function ConnectionsPage() {
   const [showAddForm, setShowNewForm] = useState(false);
   const [countryCode, setCountryCode] = useState('+91');
   const [newPhone, setNewPhone] = useState('');
+
+  // Per-number progress, QR, and Pairing code state
   const [activeQr, setActiveQr] = useState<string | null>(null);
   const [activePairingCode, setActivePairingCode] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [waitingForPairing, setWaitingForPairing] = useState(false);
+  const [connectingNumber, setConnectingNumber] = useState('');
 
   useEffect(() => {
     fetchSessions();
     const interval = setInterval(() => {
       fetchSessions();
-    }, 4000);
+      if (waitingForPairing && connectingNumber) {
+        checkConnectingStatus(connectingNumber);
+      }
+    }, 2000);
     return () => clearInterval(interval);
-  }, [showAddForm, newPhone, countryCode]);
+  }, [showAddForm, connectingNumber, waitingForPairing]);
+
+  const checkConnectingStatus = async (phoneToPoll: string) => {
+    try {
+      const res = await api.get(`/whatsapp/session-status?phone=${phoneToPoll}`);
+      const statusObj = res.data?.result;
+      if (statusObj?.status === 'connected') {
+        toast.success(`🎉 WhatsApp (+${phoneToPoll}) connected successfully!`);
+        setShowNewForm(false);
+        setNewPhone('');
+        setActiveQr(null);
+        setActivePairingCode(null);
+        setWaitingForPairing(false);
+        setConnectingNumber('');
+        fetchSessions();
+      }
+    } catch (e) {
+      // Ignore polling errors
+    }
+  };
 
   const fetchSessions = async () => {
     try {
       const response = await api.get('/whatsapp/user-sessions');
-      if (response.data?.status && Array.isArray(response.data.result)) {
-        const fetchedSessions: SessionAccount[] = response.data.result;
-        setSessions(fetchedSessions);
+      const connectedSessions = response.data?.result || [];
 
-        // Auto-dismiss the Add Form when the requested phone becomes connected
-        if (showAddForm && newPhone) {
-          const targetNum = (countryCode.replace('+', '') + newPhone.replace(/\D/g, '')).replace(/\D/g, '');
-          const newlyConnected = fetchedSessions.find(
-            s => s.status === 'connected' && (
-              s.phone.replace(/\D/g, '') === targetNum ||
-              targetNum.endsWith(s.phone.replace(/\D/g, '')) ||
-              s.phone.replace(/\D/g, '').endsWith(targetNum)
-            )
+      if (Array.isArray(connectedSessions)) {
+        setSessions(connectedSessions);
+
+        // Auto-dismiss when the target number becomes connected
+        if (waitingForPairing && connectingNumber) {
+          const newlyConnected = connectedSessions.find(
+            (s: any) =>
+              s.phone.replace(/\D/g, '') === connectingNumber ||
+              connectingNumber.endsWith(s.phone.replace(/\D/g, '')) ||
+              s.phone.replace(/\D/g, '').endsWith(connectingNumber)
           );
 
           if (newlyConnected) {
-            toast.success(`WhatsApp (+${newlyConnected.phone}) connected successfully!`);
+            toast.success(`🎉 WhatsApp (+${newlyConnected.phone}) connected successfully!`);
             setShowNewForm(false);
             setNewPhone('');
             setActiveQr(null);
             setActivePairingCode(null);
+            setWaitingForPairing(false);
+            setConnectingNumber('');
           }
         }
       }
     } catch (error) {
-      // Suppress transient network log
+      // Suppress transient network logs
     } finally {
       setLoading(false);
     }
@@ -99,59 +123,33 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleConnectQR = async () => {
-    if (!newPhone) {
-      toast.error('Please enter a valid mobile number');
-      return;
-    }
-
-    const fullNum = countryCode.replace('+', '') + newPhone.replace(/\D/g, '');
-    setActionLoading(true);
-    setActivePairingCode(null);
-    setActiveQr(null);
-    toast.loading('Generating QR Code for +' + fullNum + '...');
-
-    try {
-      const response = await api.post('/whatsapp/connect-qr', { phone: fullNum });
-      toast.dismiss();
-      if (response.data?.status && response.data.result?.qr) {
-        setActiveQr(response.data.result.qr);
-        toast.success('QR Code generated! Scan with WhatsApp.');
-      } else {
-        toast.error('Failed to generate QR Code');
-      }
-    } catch (error: any) {
-      toast.dismiss();
-      toast.error(error.response?.data?.message || 'Failed to generate QR');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handleConnectPair = async () => {
-    if (!newPhone) {
-      toast.error('Please enter a valid mobile number');
+    const cleanNumber = newPhone.replace(/\D/g, '');
+    if (!cleanNumber || cleanNumber.length < 10) {
+      toast.error('Please enter a valid 10-digit mobile number');
       return;
     }
 
-    const fullNum = countryCode.replace('+', '') + newPhone.replace(/\D/g, '');
-    setActionLoading(true);
+    const fullNum = (countryCode.replace('+', '') + cleanNumber).replace(/\D/g, '');
+    setGeneratingCode(true);
+    setWaitingForPairing(false);
     setActivePairingCode(null);
     setActiveQr(null);
-    toast.loading('Generating Pairing Code for +' + fullNum + '...');
+    setConnectingNumber(fullNum);
+
+    toast.loading(`Generating Pairing Code for +${fullNum}...`);
 
     try {
       const response = await api.post('/whatsapp/connect-pair', { phone: fullNum });
       toast.dismiss();
       if (response.data?.status && response.data.result?.pairingCode) {
         setActivePairingCode(response.data.result.pairingCode);
-        toast.success('Pairing Code generated! Enter in WhatsApp.');
+        setWaitingForPairing(true);
+        toast.success(`Pairing Code generated for +${fullNum}!`);
       } else if (response.data?.result?.status === 'connected') {
         toast.success(`WhatsApp (+${fullNum}) is already connected!`);
         setShowNewForm(false);
         setNewPhone('');
-        setActiveQr(null);
-        setActivePairingCode(null);
         fetchSessions();
       } else {
         toast.error('Failed to generate Pairing Code');
@@ -160,7 +158,41 @@ export default function ConnectionsPage() {
       toast.dismiss();
       toast.error(error.response?.data?.message || 'Failed to generate code');
     } finally {
-      setActionLoading(false);
+      setGeneratingCode(false);
+    }
+  };
+
+  const handleConnectQR = async () => {
+    const cleanNumber = newPhone.replace(/\D/g, '');
+    if (!cleanNumber || cleanNumber.length < 10) {
+      toast.error('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    const fullNum = (countryCode.replace('+', '') + cleanNumber).replace(/\D/g, '');
+    setGeneratingCode(true);
+    setWaitingForPairing(false);
+    setActivePairingCode(null);
+    setActiveQr(null);
+    setConnectingNumber(fullNum);
+
+    toast.loading(`Generating QR Code for +${fullNum}...`);
+
+    try {
+      const response = await api.post('/whatsapp/connect-qr', { phone: fullNum });
+      toast.dismiss();
+      if (response.data?.status && response.data.result?.qr) {
+        setActiveQr(response.data.result.qr);
+        setWaitingForPairing(true);
+        toast.success(`QR Code generated for +${fullNum}!`);
+      } else {
+        toast.error('Failed to generate QR Code');
+      }
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(error.response?.data?.message || 'Failed to generate QR');
+    } finally {
+      setGeneratingCode(false);
     }
   };
 
@@ -189,7 +221,12 @@ export default function ConnectionsPage() {
         </div>
 
         <button
-          onClick={() => setShowNewForm(!showAddForm)}
+          onClick={() => {
+            setShowNewForm(!showAddForm);
+            setActiveQr(null);
+            setActivePairingCode(null);
+            setWaitingForPairing(false);
+          }}
           className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all shadow flex items-center justify-center space-x-2 text-sm shrink-0"
         >
           <Plus size={18} />
@@ -205,7 +242,13 @@ export default function ConnectionsPage() {
               <Zap size={20} className="text-emerald-600" />
               Link New WhatsApp Device
             </h3>
-            <button onClick={() => setShowNewForm(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg">
+            <button
+              onClick={() => {
+                setShowNewForm(false);
+                setWaitingForPairing(false);
+              }}
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+            >
               <XCircle size={20} />
             </button>
           </div>
@@ -214,7 +257,7 @@ export default function ConnectionsPage() {
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5 flex items-center gap-1.5">
                 <Globe size={14} className="text-emerald-600" />
-                Select Mobile Number
+                Enter Mobile Number to Link
               </label>
               <div className="flex">
                 <select
@@ -242,60 +285,99 @@ export default function ConnectionsPage() {
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
-                onClick={handleConnectQR}
-                disabled={actionLoading}
-                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 text-xs md:text-sm shadow-sm disabled:opacity-50"
-              >
-                <QrCode size={18} />
-                <span>Connect via QR Code</span>
-              </button>
-              <button
-                type="button"
                 onClick={handleConnectPair}
-                disabled={actionLoading}
+                disabled={generatingCode || !newPhone}
                 className="flex-1 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all flex items-center justify-center gap-2 text-xs md:text-sm shadow-sm disabled:opacity-50"
               >
-                <Hash size={18} />
+                {generatingCode ? <Loader2 size={18} className="animate-spin" /> : <Hash size={18} />}
                 <span>Connect via Code</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConnectQR}
+                disabled={generatingCode || !newPhone}
+                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 text-xs md:text-sm shadow-sm disabled:opacity-50"
+              >
+                {generatingCode ? <Loader2 size={18} className="animate-spin" /> : <QrCode size={18} />}
+                <span>Connect via QR Code</span>
               </button>
             </div>
           </div>
 
-          {/* QR Display */}
-          {activeQr && (
-            <div className="pt-4 border-t flex flex-col items-center space-y-4">
-              <div className="bg-white p-4 border-4 border-gray-100 rounded-xl shadow-inner">
-                <QRCodeSVG value={activeQr} size={220} />
-              </div>
-              <p className="text-xs text-gray-500 text-center max-w-xs leading-relaxed">
-                Open WhatsApp on phone &gt; Settings &gt; Linked Devices &gt; Link a Device & scan QR
-              </p>
-              <button onClick={handleConnectQR} className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 hover:underline">
-                <RefreshCcw size={14} /> Refresh QR Code
-              </button>
-            </div>
-          )}
-
-          {/* Pairing Code Display */}
+          {/* PAIRING CODE DISPLAY WITH REAL-TIME PROGRESS INDICATOR */}
           {activePairingCode && (
-            <div className="pt-4 border-t flex flex-col items-center space-y-4">
-              <div className="bg-emerald-50 px-10 py-5 border-2 border-dashed border-emerald-300 rounded-2xl shadow-inner">
+            <div className="pt-6 border-t flex flex-col items-center space-y-4">
+              <div className="text-center space-y-1">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  8-Digit Pairing Code for +{connectingNumber}
+                </span>
+              </div>
+
+              <div className="bg-emerald-50 px-10 py-5 border-2 border-dashed border-emerald-300 rounded-2xl shadow-inner text-center">
                 <span className="text-3xl md:text-4xl font-black tracking-widest text-emerald-700 font-mono">
                   {activePairingCode}
                 </span>
               </div>
+
+              {/* REAL-TIME PAIRING PROGRESS INDICATOR */}
+              {waitingForPairing && (
+                <div className="flex items-center space-x-2.5 bg-amber-50 border border-amber-200 px-5 py-2.5 rounded-xl text-amber-800 text-xs font-bold shadow-sm animate-pulse">
+                  <Loader2 size={18} className="animate-spin text-amber-600 shrink-0" />
+                  <span>Waiting for WhatsApp pairing on phone (+{connectingNumber})...</span>
+                </div>
+              )}
+
               <p className="text-xs text-gray-500 text-center max-w-xs leading-relaxed">
                 Open WhatsApp on phone &gt; Linked Devices &gt; Link with Phone Number & enter this 8-digit code
               </p>
-              <button onClick={handleConnectPair} className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 hover:underline">
+
+              <button
+                onClick={handleConnectPair}
+                className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 hover:underline"
+              >
                 <RefreshCcw size={14} /> Regenerate Pairing Code
+              </button>
+            </div>
+          )}
+
+          {/* QR CODE DISPLAY WITH REAL-TIME PROGRESS INDICATOR */}
+          {activeQr && (
+            <div className="pt-6 border-t flex flex-col items-center space-y-4">
+              <div className="text-center space-y-1">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  QR Code for +{connectingNumber}
+                </span>
+              </div>
+
+              <div className="bg-white p-4 border-4 border-gray-100 rounded-xl shadow-inner">
+                <QRCodeSVG value={activeQr} size={220} />
+              </div>
+
+              {/* REAL-TIME PAIRING PROGRESS INDICATOR */}
+              {waitingForPairing && (
+                <div className="flex items-center space-x-2.5 bg-amber-50 border border-amber-200 px-5 py-2.5 rounded-xl text-amber-800 text-xs font-bold shadow-sm animate-pulse">
+                  <Loader2 size={18} className="animate-spin text-amber-600 shrink-0" />
+                  <span>Waiting for QR Code scan on phone (+{connectingNumber})...</span>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500 text-center max-w-xs leading-relaxed">
+                Open WhatsApp on phone &gt; Settings &gt; Linked Devices &gt; Link a Device & scan QR
+              </p>
+
+              <button
+                onClick={handleConnectQR}
+                className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 hover:underline"
+              >
+                <RefreshCcw size={14} /> Refresh QR Code
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* CONNECTED ACCOUNTS GRID / LIST */}
+      {/* CONNECTED ACCOUNTS GRID - ONLY SHOWS FULLY CONNECTED DEVICES */}
       <div className="space-y-4">
         <h3 className="text-base md:text-lg font-bold text-gray-900 flex items-center gap-2">
           <Smartphone size={20} className="text-emerald-600" />
@@ -310,7 +392,12 @@ export default function ConnectionsPage() {
               You haven&apos;t linked any WhatsApp numbers yet. Click &quot;Connect New Number&quot; above to link your device.
             </p>
             <button
-              onClick={() => setShowNewForm(true)}
+              onClick={() => {
+                setShowNewForm(true);
+                setActiveQr(null);
+                setActivePairingCode(null);
+                setWaitingForPairing(false);
+              }}
               className="mt-4 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all inline-flex items-center gap-2 text-xs md:text-sm shadow"
             >
               <Plus size={18} /> Connect WhatsApp Now
@@ -319,9 +406,6 @@ export default function ConnectionsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sessions.map((s) => {
-              const isConnected = s.status === 'connected';
-              const isPairing = s.status === 'pairing' || s.status === 'connecting';
-
               return (
                 <div
                   key={s.phone}
@@ -334,13 +418,11 @@ export default function ConnectionsPage() {
                   {/* CARD TOP BAR */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3.5">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                        s.isPrimary
-                          ? 'bg-emerald-600 text-white'
-                          : isConnected
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-gray-100 text-gray-400'
-                      }`}>
+                      <div
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                          s.isPrimary ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
                         <Smartphone size={24} />
                       </div>
 
@@ -363,21 +445,13 @@ export default function ConnectionsPage() {
                   {/* STATUS PILL BADGE */}
                   <div className="flex items-center justify-between bg-gray-50/80 px-3.5 py-2.5 rounded-xl border border-gray-100">
                     <span className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
-                      <Wifi size={14} className={isConnected ? 'text-emerald-600' : 'text-gray-400'} />
+                      <Wifi size={14} className="text-emerald-600" />
                       Connection Status:
                     </span>
 
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                      isConnected
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : isPairing
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
-                        : 'bg-red-50 text-red-600 border border-red-200'
-                    }`}>
-                      {isConnected && <CheckCircle2 size={13} />}
-                      {isPairing && <Loader2 size={13} className="animate-spin" />}
-                      {!isConnected && !isPairing && <XCircle size={13} />}
-                      <span className="capitalize">{isConnected ? 'Online' : s.status}</span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <CheckCircle2 size={13} />
+                      <span>Online</span>
                     </span>
                   </div>
 
@@ -388,7 +462,7 @@ export default function ConnectionsPage() {
                         <Star size={14} className="fill-emerald-600 text-emerald-600" />
                         <span>Primary Active Sender</span>
                       </span>
-                    ) : isConnected ? (
+                    ) : (
                       <button
                         onClick={() => handleSetPrimary(s.phone)}
                         className="text-gray-600 hover:text-emerald-700 font-bold flex items-center gap-1.5 hover:bg-emerald-50 border border-transparent hover:border-emerald-200 px-3 py-1.5 rounded-xl transition-all"
@@ -396,8 +470,6 @@ export default function ConnectionsPage() {
                         <Star size={14} />
                         <span>Set as Primary</span>
                       </button>
-                    ) : (
-                      <span className="text-gray-400 font-medium italic">Device Offline</span>
                     )}
 
                     <button
