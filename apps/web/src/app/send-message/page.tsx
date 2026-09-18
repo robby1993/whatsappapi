@@ -25,13 +25,14 @@ export default function SendMessagePage() {
   const fetchSessions = async () => {
     try {
       const res = await api.get('/whatsapp/user-sessions');
-      if (res.data?.status && Array.isArray(res.data.result)) {
-        setSessions(res.data.result);
-        const connected = res.data.result.find((s: any) => s.status === 'connected');
+      const sessionList = res.data?.result || [];
+      if (Array.isArray(sessionList)) {
+        setSessions(sessionList);
+        const connected = sessionList.find((s: any) => s.status === 'connected');
         if (connected) {
           setFromNumber(connected.phone);
-        } else if (res.data.result.length > 0) {
-          setFromNumber(res.data.result[0].phone);
+        } else if (sessionList.length > 0) {
+          setFromNumber(sessionList[0].phone);
         }
       }
     } catch (err) {

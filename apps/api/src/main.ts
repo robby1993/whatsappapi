@@ -11,6 +11,24 @@ import * as fs from 'fs';
 dotenv.config();
 
 async function bootstrap() {
+  // Intercept process.stdout.write to silence internal libsignal C/JS E2EE key rotation logs
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk: any, encoding?: any, callback?: any): boolean => {
+    const str = typeof chunk === 'string' ? chunk : chunk.toString();
+    if (str.includes('Closing session:') || str.includes('SessionEntry')) {
+      return true;
+    }
+    return originalStdoutWrite(chunk, encoding, callback);
+  };
+
+  const originalLog = console.log;
+  console.log = (...args: any[]) => {
+    if (typeof args[0] === 'string' && (args[0].includes('Closing session:') || args[0].includes('SessionEntry'))) {
+      return;
+    }
+    originalLog(...args);
+  };
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Ensure uploads directory exists
@@ -38,8 +56,7 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
+    whitelist: false,
     transform: true,
   }));
 

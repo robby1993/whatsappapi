@@ -16,7 +16,7 @@ export class WhatsappUtils {
         const filename = cleanUrl.split('/uploads/')[1];
         const filePath = join(process.cwd(), 'uploads', filename);
         if (fs.existsSync(filePath)) {
-          mediaSource = { url: filePath };
+          mediaSource = fs.readFileSync(filePath);
         } else {
           mediaSource = { url: mediaUrl };
         }
@@ -24,16 +24,29 @@ export class WhatsappUtils {
         mediaSource = { url: mediaUrl };
       }
 
-      const type = mediaType || 'image';
+      let type = (mediaType || '').toLowerCase().trim();
+      if (!type || type === 'null' || type === 'undefined') {
+        if (cleanUrl.match(/\.(jpeg|jpg|png|gif|webp)$/i)) type = 'image';
+        else if (cleanUrl.match(/\.(mp4|mkv|mov|avi)$/i)) type = 'video';
+        else if (cleanUrl.match(/\.(mp3|wav|ogg|m4a)$/i)) type = 'audio';
+        else type = 'document';
+      }
+
       const options: any = {};
 
-      if (type === 'image') options.image = mediaSource;
-      else if (type === 'video') options.video = mediaSource;
-      else if (type === 'audio') options.audio = mediaSource;
-      else if (type === 'document') {
+      if (type === 'image') {
+        options.image = mediaSource;
+        options.mimetype = cleanUrl.match(/\.png$/i) ? 'image/png' : 'image/jpeg';
+      } else if (type === 'video') {
+        options.video = mediaSource;
+        options.mimetype = 'video/mp4';
+      } else if (type === 'audio') {
+        options.audio = mediaSource;
+        options.mimetype = 'audio/mp4';
+      } else {
         options.document = mediaSource;
         options.mimetype = 'application/octet-stream';
-        options.fileName = caption.slice(0, 30) || 'Document';
+        options.fileName = caption.slice(0, 30) || 'Attachment';
       }
 
       if (caption && type !== 'audio') {

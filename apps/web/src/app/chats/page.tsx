@@ -145,6 +145,16 @@ export default function BaileysChatsPage() {
     return d.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
   };
 
+  const resolveMediaUrl = (url?: string) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api').replace(/\/api\/?$/, '');
+      return url.replace(/http:\/\/localhost:5001/g, apiBase);
+    }
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api').replace(/\/api\/?$/, '');
+    return `${apiBase}${url.startsWith('/') ? '' : '/'}${url}`;
+  };
+
   const fetchChats = async () => {
     try {
       const res = await api.get('/whatsapp/chats');
@@ -521,10 +531,10 @@ export default function BaileysChatsPage() {
                             {m.mediaUrl && (
                               <div className="rounded-lg overflow-hidden mb-1 border border-black/10">
                                 {m.mediaType === 'image' || m.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
-                                  <img src={m.mediaUrl} alt="Attachment" className="max-h-60 w-full object-cover" />
+                                  <img src={resolveMediaUrl(m.mediaUrl)} alt="Attachment" className="max-h-60 w-full object-cover" />
                                 ) : (
                                   <a
-                                    href={m.mediaUrl}
+                                    href={resolveMediaUrl(m.mediaUrl)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="flex items-center space-x-2 p-2 bg-black/5 rounded text-xs font-bold text-[#111b21] underline"
