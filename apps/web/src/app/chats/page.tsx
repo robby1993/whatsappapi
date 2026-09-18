@@ -15,7 +15,8 @@ import {
   Paperclip,
   X,
   Image as ImageIcon,
-  FileText
+  FileText,
+  ArrowLeft
 } from 'lucide-react';
 
 interface ChatContact {
@@ -83,7 +84,7 @@ export default function BaileysChatsPage() {
       const chatList = res.data?.result || [];
       if (Array.isArray(chatList)) {
         setChats(chatList);
-        if (!selectedContact && chatList.length > 0) {
+        if (!selectedContact && chatList.length > 0 && typeof window !== 'undefined' && window.innerWidth >= 768) {
           setSelectedContact(chatList[0].phone);
           fetchChatMessages(chatList[0].phone, true);
         }
@@ -202,12 +203,16 @@ export default function BaileysChatsPage() {
   if (loadingChats) return <div className="flex items-center justify-center h-full">Loading WhatsApp Chats...</div>;
 
   return (
-    <div className="h-[calc(100vh-8rem)] max-w-6xl mx-auto flex bg-white border rounded-2xl shadow-sm overflow-hidden">
+    <div className="h-[calc(100vh-6rem)] md:h-[calc(100vh-7rem)] w-full max-w-6xl mx-auto flex bg-white border rounded-2xl shadow-sm overflow-hidden relative">
       {/* LEFT CHATS LIST */}
-      <div className="w-80 md:w-96 border-r flex flex-col h-full bg-gray-50/50 shrink-0">
-        <div className="p-4 border-b space-y-3 bg-white">
+      <div
+        className={`w-full md:w-80 lg:w-96 border-r flex flex-col h-full bg-gray-50/50 shrink-0 ${
+          selectedContact ? 'hidden md:flex' : 'flex'
+        }`}
+      >
+        <div className="p-4 border-b space-y-3 bg-white shrink-0">
           <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <h3 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
               <MessageSquare size={20} className="text-emerald-600" />
               <span>WhatsApp Chats</span>
             </h3>
@@ -262,9 +267,9 @@ export default function BaileysChatsPage() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1">
                       <h4 className="font-bold text-gray-900 text-sm truncate">+{c.phone}</h4>
-                      <span className="text-[10px] text-gray-400 font-mono">
+                      <span className="text-[10px] text-gray-400 font-mono shrink-0">
                         {new Date(c.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
@@ -278,18 +283,32 @@ export default function BaileysChatsPage() {
       </div>
 
       {/* RIGHT LIVE CHAT FEED */}
-      <div className="flex-1 flex flex-col h-full bg-gray-50">
+      <div
+        className={`flex-1 flex flex-col h-full bg-gray-50 min-w-0 ${
+          selectedContact ? 'flex' : 'hidden md:flex'
+        }`}
+      >
         {selectedContact ? (
           <>
             {/* CHAT HEADER */}
-            <div className="p-4 bg-white border-b flex items-center justify-between shadow-sm">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+            <div className="p-3 md:p-4 bg-white border-b flex items-center justify-between shadow-sm shrink-0">
+              <div className="flex items-center space-x-3 min-w-0">
+                {/* Mobile Back Button */}
+                <button
+                  onClick={() => setSelectedContact(null)}
+                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg md:hidden transition-colors shrink-0"
+                  title="Back to Chats"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
                   <User size={20} />
                 </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-base">+{selectedContact}</h3>
-                  <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+
+                <div className="min-w-0">
+                  <h3 className="font-bold text-gray-900 text-sm md:text-base truncate">+{selectedContact}</h3>
+                  <span className="text-[10px] md:text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     Active WhatsApp Conversation
                   </span>
@@ -298,7 +317,7 @@ export default function BaileysChatsPage() {
 
               <button
                 onClick={() => fetchChatMessages(selectedContact, true)}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100"
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100 shrink-0"
                 title="Refresh Messages"
               >
                 <RefreshCw size={18} />
@@ -306,7 +325,7 @@ export default function BaileysChatsPage() {
             </div>
 
             {/* MESSAGES THREAD */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
+            <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full text-xs text-gray-400 space-x-2">
                   <Loader2 size={18} className="animate-spin text-emerald-600" />
@@ -325,7 +344,7 @@ export default function BaileysChatsPage() {
                       className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                     >
                       <div
-                        className={`max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm space-y-1.5 ${
+                        className={`max-w-[85%] sm:max-w-sm md:max-w-md px-3.5 md:px-4 py-2.5 rounded-2xl text-xs md:text-sm shadow-sm space-y-1.5 ${
                           isMe
                             ? 'bg-emerald-600 text-white rounded-br-none'
                             : 'bg-white text-gray-900 border rounded-bl-none'
@@ -350,10 +369,10 @@ export default function BaileysChatsPage() {
                           </div>
                         )}
 
-                        {m.message && <p className="whitespace-pre-wrap break-words">{m.message}</p>}
+                        {m.message && <p className="whitespace-pre-wrap break-words leading-relaxed">{m.message}</p>}
 
                         <div
-                          className={`flex items-center justify-end space-x-1 text-[10px] ${
+                          className={`flex items-center justify-end space-x-1 text-[10px] pt-0.5 shrink-0 ${
                             isMe ? 'text-emerald-100' : 'text-gray-400'
                           }`}
                         >
@@ -375,27 +394,27 @@ export default function BaileysChatsPage() {
 
             {/* ATTACHMENT PREVIEW */}
             {mediaFile && (
-              <div className="px-4 py-2 bg-gray-100 border-t flex items-center justify-between">
+              <div className="px-4 py-2 bg-gray-100 border-t flex items-center justify-between shrink-0">
                 <div className="flex items-center space-x-2 text-xs font-semibold text-gray-700 truncate">
-                  <ImageIcon size={16} className="text-emerald-600" />
+                  <ImageIcon size={16} className="text-emerald-600 shrink-0" />
                   <span className="truncate">{mediaFile.name}</span>
                 </div>
-                <button onClick={removeMedia} className="p-1 text-red-500 hover:bg-red-100 rounded-lg">
+                <button onClick={removeMedia} className="p-1 text-red-500 hover:bg-red-100 rounded-lg shrink-0">
                   <X size={16} />
                 </button>
               </div>
             )}
 
             {/* MESSAGE COMPOSER INPUT */}
-            <div className="p-4 bg-white border-t">
+            <div className="p-3 md:p-4 bg-white border-t shrink-0">
               <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
                 <button
                   type="button"
                   onClick={() => chatFileInputRef.current?.click()}
-                  className="p-3 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 rounded-xl transition-colors"
-                  title="Attach Media (Image, Video, Document)"
+                  className="p-2.5 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 rounded-xl transition-colors shrink-0"
+                  title="Attach Media"
                 >
-                  <Paperclip size={20} />
+                  <Paperclip size={18} />
                 </button>
 
                 <input
@@ -411,15 +430,15 @@ export default function BaileysChatsPage() {
                   placeholder="Type a message..."
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  className="flex-1 px-4 py-3 border rounded-xl text-sm focus:outline-none focus:border-emerald-500"
+                  className="flex-1 px-3.5 py-2.5 md:py-3 border rounded-xl text-xs md:text-sm focus:outline-none focus:border-emerald-500 min-w-0"
                 />
 
                 <button
                   type="submit"
                   disabled={sending || (!inputMessage.trim() && !mediaFile)}
-                  className="p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all shadow disabled:opacity-50"
+                  className="p-2.5 md:p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all shadow disabled:opacity-50 shrink-0"
                 >
-                  {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                  {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                 </button>
               </form>
             </div>
