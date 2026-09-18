@@ -55,6 +55,12 @@ export class User extends Model<User> {
   isActive: boolean;
 
   @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  primaryPhone: string;
+
+  @Column({
     type: DataType.BOOLEAN,
     defaultValue: true,
   })

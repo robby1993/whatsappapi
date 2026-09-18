@@ -12,7 +12,10 @@ import {
   RefreshCw,
   Loader2,
   CheckCheck,
-  Smartphone
+  Paperclip,
+  X,
+  Image as ImageIcon,
+  FileText
 } from 'lucide-react';
 
 interface ChatContact {
@@ -27,6 +30,8 @@ interface Message {
   sender: string;
   receiver: string;
   message: string;
+  mediaUrl?: string;
+  mediaType?: string;
   status: string;
   createdAt: string;
 }
@@ -40,6 +45,12 @@ export default function BaileysChatsPage() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+
+  // Attachment state
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState('image');
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
 
   // New Chat Modal
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -105,22 +116,58 @@ export default function BaileysChatsPage() {
     fetchChatMessages(phone, true);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setMediaFile(file);
+      const type = file.type.split('/')[0];
+      setMediaType(type === 'application' ? 'document' : type);
+
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => setMediaPreview(reader.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        setMediaPreview(null);
+      }
+    }
+  };
+
+  const removeMedia = () => {
+    setMediaFile(null);
+    setMediaPreview(null);
+    if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedContact || !inputMessage.trim()) return;
+    if (!selectedContact || (!inputMessage.trim() && !mediaFile)) return;
 
     const msgToSend = inputMessage.trim();
     setInputMessage('');
     setSending(true);
 
     try {
+      let uploadedMediaUrl = null;
+      if (mediaFile) {
+        const formData = new FormData();
+        formData.append('file', mediaFile);
+        const uploadRes = await api.post('/whatsapp/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        uploadedMediaUrl = uploadRes.data?.result?.url;
+      }
+
       const res = await api.post('/whatsapp/send-message', {
         phone: selectedContact,
         message: msgToSend,
+        mediaUrl: uploadedMediaUrl,
+        mediaType: mediaFile ? mediaType : null
       });
 
       if (res.data?.status) {
         toast.success('Message sent!');
+        removeMedia();
         fetchChatMessages(selectedContact, false);
         fetchChats();
       } else {
@@ -278,13 +325,33 @@ export default function BaileysChatsPage() {
                       className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                     >
                       <div
-                        className={`max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm space-y-1 ${
+                        className={`max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm space-y-1.5 ${
                           isMe
                             ? 'bg-emerald-600 text-white rounded-br-none'
                             : 'bg-white text-gray-900 border rounded-bl-none'
                         }`}
                       >
-                        <p className="whitespace-pre-wrap break-words">{m.message}</p>
+                        {/* Media Display */}
+                        {m.mediaUrl && (
+                          <div className="rounded-xl overflow-hidden mb-1 border border-black/10">
+                            {m.mediaType === 'image' || m.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
+                              <img src={m.mediaUrl} alt="Attachment" className="max-h-60 w-full object-cover" />
+                            ) : (
+                              <a
+                                href={m.mediaUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center space-x-2 p-2 bg-black/10 rounded-lg text-xs font-semibold underline"
+                              >
+                                <FileText size={16} />
+                                <span>View Attachment</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {m.message && <p className="whitespace-pre-wrap break-words">{m.message}</p>}
+
                         <div
                           className={`flex items-center justify-end space-x-1 text-[10px] ${
                             isMe ? 'text-emerald-100' : 'text-gray-400'
@@ -306,9 +373,39 @@ export default function BaileysChatsPage() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* ATTACHMENT PREVIEW */}
+            {mediaFile && (
+              <div className="px-4 py-2 bg-gray-100 border-t flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-gray-700 truncate">
+                  <ImageIcon size={16} className="text-emerald-600" />
+                  <span className="truncate">{mediaFile.name}</span>
+                </div>
+                <button onClick={removeMedia} className="p-1 text-red-500 hover:bg-red-100 rounded-lg">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
             {/* MESSAGE COMPOSER INPUT */}
             <div className="p-4 bg-white border-t">
-              <form onSubmit={handleSendMessage} className="flex items-center space-x-3">
+              <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => chatFileInputRef.current?.click()}
+                  className="p-3 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 rounded-xl transition-colors"
+                  title="Attach Media (Image, Video, Document)"
+                >
+                  <Paperclip size={20} />
+                </button>
+
+                <input
+                  type="file"
+                  ref={chatFileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,application/*"
+                />
+
                 <input
                   type="text"
                   placeholder="Type a message..."
@@ -316,9 +413,10 @@ export default function BaileysChatsPage() {
                   onChange={(e) => setInputMessage(e.target.value)}
                   className="flex-1 px-4 py-3 border rounded-xl text-sm focus:outline-none focus:border-emerald-500"
                 />
+
                 <button
                   type="submit"
-                  disabled={sending || !inputMessage.trim()}
+                  disabled={sending || (!inputMessage.trim() && !mediaFile)}
                   className="p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all shadow disabled:opacity-50"
                 >
                   {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}

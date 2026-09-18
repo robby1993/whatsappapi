@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Query, Param, UseGuards, Req, HttpStatus, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Query, Param, UseGuards, Req, HttpStatus, UseInterceptors, UploadedFile, NotFoundException } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappUtils } from './whatsapp-utils';
 import { TokenAuthGuard } from '../auth/guards/token-auth.guard';
@@ -8,6 +8,7 @@ import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { Session } from '../database/models/Session';
+import { User } from '../database/models/User';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -27,6 +28,8 @@ export class WhatsappController {
     private scheduledMessageModel: typeof ScheduledMessage,
     @InjectModel(Session)
     private sessionModel: typeof Session,
+    @InjectModel(User)
+    private userModel: typeof User,
   ) {}
 
   @Post('upload')
@@ -49,6 +52,18 @@ export class WhatsappController {
         type: file.mimetype.split('/')[0] === 'application' ? 'document' : file.mimetype.split('/')[0]
       }
     };
+  }
+
+  @Post('set-primary')
+  async setPrimaryPhone(@Body('phone') phone: string, @Req() req: any) {
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const user = await this.userModel.findOne({ where: { number: userPhone } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const cleanPhone = (phone || userPhone).toString().replace(/\D/g, '');
+    await user.update({ primaryPhone: cleanPhone });
+
+    return { status: true, message: `Primary WhatsApp sender set to +${cleanPhone}` };
   }
 
   @Post('connect-pair')
@@ -118,6 +133,9 @@ export class WhatsappController {
       const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
       const isAdmin = req.user?.userType === 'admin';
 
+      const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+      const primaryPhone = currentUser?.primaryPhone || userPhone;
+
       let dbSessions = [];
       if (isAdmin) {
         dbSessions = await this.sessionModel.findAll({
@@ -151,6 +169,7 @@ export class WhatsappController {
         activeSessions.push({
           phone: cleanPhone,
           status: liveStatus.status || 'disconnected',
+          isPrimary: cleanPhone === primaryPhone,
           qr: liveStatus.qr || null,
           pairingCode: liveStatus.pairingCode || null
         });
@@ -188,7 +207,10 @@ export class WhatsappController {
 
     const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-    const sender = (!isAdmin || !body.from ? userPhone : body.from).toString().replace(/\D/g, '');
+    const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+    const defaultSender = currentUser?.primaryPhone || userPhone;
+
+    const sender = (!isAdmin || !body.from ? defaultSender : (body.from || defaultSender)).toString().replace(/\D/g, '');
 
     const sock = this.whatsappService.sessions.get(sender);
 
@@ -205,7 +227,7 @@ export class WhatsappController {
         return { status: false, message: 'Message content or media is required', result: null };
       }
 
-      console.log(`📤 Sending message to ${jid}...`);
+      console.log(`📤 Sending message to ${jid} from ${sender}...`);
       const result = await sock.sendMessage(jid, messageOptions);
 
       await this.messageLogModel.create({
@@ -236,7 +258,10 @@ export class WhatsappController {
 
     const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-    const sender = (!isAdmin || !body.from ? userPhone : body.from).toString().replace(/\D/g, '');
+    const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+    const defaultSender = currentUser?.primaryPhone || userPhone;
+
+    const sender = (!isAdmin || !body.from ? defaultSender : (body.from || defaultSender)).toString().replace(/\D/g, '');
 
     try {
       const results = await this.whatsappService.broadcast(
@@ -272,8 +297,10 @@ export class WhatsappController {
 
     const isAdmin = req.user?.userType === 'admin';
     const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-    const sender = (!isAdmin || !body.from ? userPhone : body.from).toString().replace(/\D/g, '');
+    const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+    const defaultSender = currentUser?.primaryPhone || userPhone;
 
+    const sender = (!isAdmin || !body.from ? defaultSender : (body.from || defaultSender)).toString().replace(/\D/g, '');
     const cleanReceiver = body.phone.replace(/\D/g, '');
 
     const timeInMs = typeof body.scheduleTime === 'number'

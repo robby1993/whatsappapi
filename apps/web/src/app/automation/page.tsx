@@ -9,13 +9,10 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
-  Smartphone,
   MoreVertical,
   Loader2,
   ToggleLeft,
-  ToggleRight,
-  Sparkles,
-  MessageSquare
+  ToggleRight
 } from 'lucide-react';
 
 interface ChatFlow {
@@ -29,15 +26,12 @@ interface ChatFlow {
 
 export default function BaileysAutomationPage() {
   const [flows, setFlows] = useState<ChatFlow[]>([]);
-  const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
 
-  // Form State
-  const [name, setName] = useState('');
+  // Simplified Form State (Only Keywords & Message)
   const [keywordsText, setKeywordsText] = useState('');
-  const [selectedPhone, setSelectedPhone] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -57,14 +51,9 @@ export default function BaileysAutomationPage() {
 
   const fetchData = async () => {
     try {
-      const [flowsRes, sessionsRes] = await Promise.all([
-        api.get('/chatflows'),
-        api.get('/whatsapp/user-sessions'),
-      ]);
-
-      if (flowsRes.data?.status && Array.isArray(flowsRes.data.result)) setFlows(flowsRes.data.result);
-      if (sessionsRes.data?.status && Array.isArray(sessionsRes.data.result)) {
-        setSessions(sessionsRes.data.result.filter((s: any) => s.status === 'connected'));
+      const res = await api.get('/chatflows');
+      if (res.data?.status && Array.isArray(res.data.result)) {
+        setFlows(res.data.result);
       }
     } catch (err) {
       toast.error('Failed to load automation flows');
@@ -75,8 +64,8 @@ export default function BaileysAutomationPage() {
 
   const handleCreateFlow = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !keywordsText || !replyMessage) {
-      toast.error('Please fill in Rule Name, Trigger Keywords, and Reply Message');
+    if (!keywordsText.trim() || !replyMessage.trim()) {
+      toast.error('Please enter Trigger Keywords and Reply Message');
       return;
     }
 
@@ -85,12 +74,13 @@ export default function BaileysAutomationPage() {
       .map((k) => k.trim())
       .filter((k) => k.length > 0);
 
+    const generatedRuleName = `Auto-Reply: ${keywords.slice(0, 3).join(', ')}`;
+
     setSaving(true);
     try {
       const res = await api.post('/chatflows', {
-        name,
+        name: generatedRuleName,
         triggerKeywords: keywords,
-        botPhone: selectedPhone || null,
         steps: [
           {
             type: 'text',
@@ -102,7 +92,6 @@ export default function BaileysAutomationPage() {
 
       if (res.data?.status) {
         toast.success('WhatsApp Web Auto-Responder created!');
-        setName('');
         setKeywordsText('');
         setReplyMessage('');
         setShowAddForm(false);
@@ -145,11 +134,11 @@ export default function BaileysAutomationPage() {
   if (loading) return <div className="flex items-center justify-center h-full">Loading WhatsApp automations...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-4" ref={menuRef}>
+    <div className="max-w-4xl mx-auto space-y-8 py-4" ref={menuRef}>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold text-gray-900">WhatsApp Web Automation</h2>
-          <p className="text-gray-600 mt-1">Configure keyword-based automated replies & chatbots for WhatsApp Web sessions</p>
+          <p className="text-gray-600 mt-1">Configure keyword-based automated replies for WhatsApp Web sessions</p>
         </div>
 
         <button
@@ -167,7 +156,7 @@ export default function BaileysAutomationPage() {
           <div className="flex items-center justify-between border-b pb-3">
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <Bot size={20} className="text-emerald-600" />
-              Create Keyword Auto-Responder Rule
+              New Keyword Auto-Responder
             </h3>
             <button onClick={() => setShowAddForm(false)} className="text-gray-400 hover:text-gray-600">
               <XCircle size={20} />
@@ -175,38 +164,6 @@ export default function BaileysAutomationPage() {
           </div>
 
           <form onSubmit={handleCreateFlow} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Rule Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Price Query Reply"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2.5 border rounded-xl text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
-                  Target Connected WhatsApp Device
-                </label>
-                <select
-                  value={selectedPhone}
-                  onChange={(e) => setSelectedPhone(e.target.value)}
-                  className="w-full px-4 py-2.5 border rounded-xl text-sm bg-white"
-                >
-                  <option value="">All Connected WhatsApp Devices</option>
-                  {sessions.map((s) => (
-                    <option key={s.phone} value={s.phone}>
-                      +{s.phone}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
                 Trigger Keywords (Comma Separated)
@@ -217,7 +174,7 @@ export default function BaileysAutomationPage() {
                 placeholder="e.g. price, pricing, rate, cost"
                 value={keywordsText}
                 onChange={(e) => setKeywordsText(e.target.value)}
-                className="w-full px-4 py-2.5 border rounded-xl text-sm font-mono"
+                className="w-full px-4 py-2.5 border rounded-xl text-sm font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
 
@@ -226,12 +183,12 @@ export default function BaileysAutomationPage() {
                 Automated Reply Message
               </label>
               <textarea
-                rows={3}
+                rows={4}
                 required
                 placeholder="Type the response message that will be sent automatically when keywords match..."
                 value={replyMessage}
                 onChange={(e) => setReplyMessage(e.target.value)}
-                className="w-full px-4 py-2.5 border rounded-xl text-sm resize-none"
+                className="w-full px-4 py-2.5 border rounded-xl text-sm resize-none focus:outline-none focus:border-emerald-500"
               />
             </div>
 
