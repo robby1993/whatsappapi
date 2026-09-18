@@ -14,6 +14,7 @@ import { WhatsappUtils } from './whatsapp-utils';
 
 import { join } from 'path';
 import * as fs from 'fs';
+import pino from 'pino';
 import { proto } from '@whiskeysockets/baileys';
 
 @Injectable()
@@ -95,6 +96,7 @@ export class WhatsappService implements OnModuleInit {
         const sock = makeWASocket({
           version,
           auth: state,
+          logger: pino({ level: 'silent' }),
           printQRInTerminal: false,
           browser: Browsers.ubuntu('Chrome'),
           syncFullHistory: true,
