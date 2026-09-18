@@ -24,6 +24,16 @@ export class WhatsappService implements OnModuleInit {
   private initializing = new Map<string, Promise<any>>();
   private loggingOut = new Set<string>();
 
+  public registerContactName(phoneOrJid: string, rawName: string) {
+    if (!phoneOrJid || !rawName) return;
+    const cleanPhone = String(phoneOrJid).replace(/@.*$/, '').replace(/\D/g, '');
+    const cleanName = String(rawName).trim();
+
+    if (cleanPhone && cleanPhone.length >= 10 && cleanPhone.length <= 13 && cleanName && !cleanName.startsWith('+')) {
+      this.contactsMap.set(cleanPhone, cleanName);
+    }
+  }
+
   constructor(
     @InjectModel(Session)
     private sessionModel: typeof Session,
@@ -183,21 +193,15 @@ export class WhatsappService implements OnModuleInit {
 
         sock.ev.on('contacts.upsert', (contacts: any[]) => {
           for (const c of contacts) {
-            const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
-            const name = c.name || c.notify || c.verifiedName;
-            if (clean && name) {
-              this.contactsMap.set(clean, name);
-            }
+            const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
+            this.registerContactName(c.id || c.jid || c.phone, name);
           }
         });
 
         sock.ev.on('contacts.update', (updates: any[]) => {
           for (const c of updates) {
-            const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
-            const name = c.name || c.notify || c.verifiedName;
-            if (clean && name) {
-              this.contactsMap.set(clean, name);
-            }
+            const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
+            this.registerContactName(c.id || c.jid || c.phone, name);
           }
         });
 
@@ -207,15 +211,15 @@ export class WhatsappService implements OnModuleInit {
           console.log(`📜 History Sync (set) received for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts`);
           if (history.contacts && history.contacts.length > 0) {
             for (const c of history.contacts) {
-              const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
-              const name = c.name || c.notify || c.verifiedName;
-              if (clean && name) {
-                this.contactsMap.set(clean, name);
-              }
+              const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
+              this.registerContactName(c.id || c.jid || c.phone, name);
             }
           }
           if (history.messages && history.messages.length > 0) {
             for (const msg of history.messages) {
+              if (msg.pushName) {
+                this.registerContactName(msg.key?.remoteJid, msg.pushName);
+              }
               await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
             }
           }
@@ -225,15 +229,15 @@ export class WhatsappService implements OnModuleInit {
           console.log(`📜 History Sync (sync) received for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts`);
           if (history.contacts && history.contacts.length > 0) {
             for (const c of history.contacts) {
-              const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
-              const name = c.name || c.notify || c.verifiedName;
-              if (clean && name) {
-                this.contactsMap.set(clean, name);
-              }
+              const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
+              this.registerContactName(c.id || c.jid || c.phone, name);
             }
           }
           if (history.messages && history.messages.length > 0) {
             for (const msg of history.messages) {
+              if (msg.pushName) {
+                this.registerContactName(msg.key?.remoteJid, msg.pushName);
+              }
               await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
             }
           }

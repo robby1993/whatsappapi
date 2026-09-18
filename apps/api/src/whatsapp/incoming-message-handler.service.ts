@@ -52,6 +52,13 @@ export class IncomingMessageHandler {
       const msgId = msg.key?.id || `hist_${Date.now()}_${Math.random()}`;
       const pushName = msg.pushName || null;
 
+      if (pushName) {
+        this.messageLogModel.update(
+          { senderName: pushName },
+          { where: { sender: cleanRemote, senderName: null } }
+        ).catch(() => {});
+      }
+
       const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
       if (!existing) {
         await this.messageLogModel.create({
@@ -99,6 +106,13 @@ export class IncomingMessageHandler {
           const status = isFromMe ? 'sent' : 'received';
           const msgId = msg.key?.id || `msg_${Date.now()}`;
           const pushName = msg.pushName || null;
+
+          if (pushName) {
+            this.messageLogModel.update(
+              { senderName: pushName },
+              { where: { sender: cleanRemote, senderName: null } }
+            ).catch(() => {});
+          }
 
           const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
           if (!existing) {
