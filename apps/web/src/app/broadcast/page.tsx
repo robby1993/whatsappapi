@@ -61,8 +61,6 @@ export default function BroadcastPage() {
       console.error('Failed to fetch sessions');
     }
   };
-    }
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
