@@ -13,6 +13,12 @@ export class MessageLog extends Model<MessageLog> {
 
   @Column({
     type: DataType.STRING,
+    allowNull: true,
+  })
+  senderName: string;
+
+  @Column({
+    type: DataType.STRING,
     allowNull: false,
   })
   receiver: string;

@@ -335,12 +335,26 @@ export class WhatsappController {
       const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
       const isAdmin = req.user?.userType === 'admin';
 
+      const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+      const primaryPhone = (currentUser?.primaryPhone || '').replace(/\D/g, '');
+
+      const userSessions = await this.sessionModel.findAll({
+        where: { dataType: 'creds', dataId: 'base', [Op.or]: [{ userNumber: userPhone }, { phone: userPhone }] },
+        attributes: ['phone']
+      });
+
+      const userPhones = Array.from(new Set([
+        userPhone,
+        primaryPhone,
+        ...userSessions.map(s => String(s.phone).replace(/\D/g, ''))
+      ])).filter(Boolean);
+
       const whereCondition = isAdmin
         ? {}
         : {
             [Op.or]: [
-              { sender: userPhone },
-              { receiver: userPhone }
+              { sender: { [Op.in]: userPhones } },
+              { receiver: { [Op.in]: userPhones } }
             ]
           };
 
@@ -352,24 +366,83 @@ export class WhatsappController {
 
       const chatsMap = new Map<string, any>();
 
-      for (const log of logs) {
-        const otherNumber = log.sender === userPhone ? log.receiver : log.sender;
-        const cleanOther = (otherNumber || '').replace(/\D/g, '');
+      // Active connected socket for profile picture & contact lookup
+      const activeSock = this.whatsappService.sessions.get(primaryPhone) || Array.from(this.whatsappService.sessions.values())[0];
 
-        if (!cleanOther || cleanOther === userPhone) continue;
+      for (const log of logs) {
+        const isSenderUser = userPhones.includes(log.sender);
+        const isReceiverUser = userPhones.includes(log.receiver);
+
+        let cleanOther = '';
+        const pushName = log.senderName && !log.senderName.startsWith('+') ? log.senderName : null;
+
+        if (isSenderUser && !isReceiverUser) {
+          cleanOther = (log.receiver || '').replace(/\D/g, '');
+        } else if (!isSenderUser && isReceiverUser) {
+          cleanOther = (log.sender || '').replace(/\D/g, '');
+        } else if (!isSenderUser && !isReceiverUser) {
+          cleanOther = (log.sender || '').replace(/\D/g, '');
+        }
+
+        if (!cleanOther || userPhones.includes(cleanOther)) continue;
         if (cleanOther.length < 10 || cleanOther.length > 13 || cleanOther.startsWith('1203')) continue;
 
         if (!chatsMap.has(cleanOther)) {
           chatsMap.set(cleanOther, {
             phone: cleanOther,
-            lastMessage: log.message || (log.mediaUrl ? '📷 Media Attachment' : 'Message'),
+            name: pushName || `+${cleanOther}`,
+            lastMessage: log.message || (log.mediaUrl ? '📷 Photo' : 'Message'),
             timestamp: log.createdAt || log.timestamp,
             status: log.status,
+            profilePicUrl: null,
           });
+        } else if (pushName) {
+          const existing = chatsMap.get(cleanOther);
+          if (!existing.name || existing.name === `+${cleanOther}`) {
+            existing.name = pushName;
+          }
         }
       }
 
-      return { status: true, message: 'Chats fetched successfully', result: Array.from(chatsMap.values()) };
+      const chatArray = Array.from(chatsMap.values());
+
+      // Query live contactsMap from Baileys socket store & database for any contact push name
+      for (const c of chatArray) {
+        const liveContactName = this.whatsappService.contactsMap.get(c.phone);
+        if (liveContactName) {
+          c.name = liveContactName;
+        } else if (!c.name || c.name === `+${c.phone}`) {
+          const contactMsg = await this.messageLogModel.findOne({
+            where: {
+              sender: c.phone,
+              senderName: { [Op.ne]: null }
+            },
+            order: [['createdAt', 'DESC']]
+          });
+          if (contactMsg?.senderName && !contactMsg.senderName.startsWith('+')) {
+            c.name = contactMsg.senderName;
+          }
+        }
+      }
+
+      // Fetch live profile pictures for recent contacts from active Baileys socket with timeout
+      if (activeSock) {
+        await Promise.all(
+          chatArray.slice(0, 15).map(async (c) => {
+            try {
+              const jid = c.phone + '@s.whatsapp.net';
+              const picPromise = activeSock.profilePictureUrl(jid, 'image');
+              const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+              const picUrl = await Promise.race([picPromise, timeoutPromise]).catch(() => null);
+              if (picUrl && typeof picUrl === 'string') {
+                c.profilePicUrl = picUrl;
+              }
+            } catch (e) {}
+          })
+        );
+      }
+
+      return { status: true, message: 'Chats fetched successfully', result: chatArray };
     } catch (err: any) {
       console.error('❌ Error fetching chats:', err.message);
       return { status: false, message: err.message, result: [] };
@@ -386,22 +459,59 @@ export class WhatsappController {
         return { status: true, message: 'Invalid chat number', result: [] };
       }
 
+      const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+      const primaryPhone = (currentUser?.primaryPhone || '').replace(/\D/g, '');
+
+      const userSessions = await this.sessionModel.findAll({
+        where: { dataType: 'creds', dataId: 'base', [Op.or]: [{ userNumber: userPhone }, { phone: userPhone }] },
+        attributes: ['phone']
+      });
+
+      const userPhones = Array.from(new Set([
+        userPhone,
+        primaryPhone,
+        ...userSessions.map(s => String(s.phone).replace(/\D/g, ''))
+      ])).filter(Boolean);
+
       const messages = await this.messageLogModel.findAll({
         where: {
           [Op.or]: [
-            { sender: userPhone, receiver: cleanOther },
-            { sender: cleanOther, receiver: userPhone },
-            { sender: cleanOther, receiver: { [Op.like]: `%${userPhone}%` } }
+            { sender: { [Op.in]: userPhones }, receiver: cleanOther },
+            { sender: cleanOther, receiver: { [Op.in]: userPhones } },
+            { sender: cleanOther, receiver: { [Op.like]: `%${cleanOther}%` } }
           ]
         },
         order: [['createdAt', 'ASC']],
-        limit: 200,
+        limit: 300,
       });
 
       return { status: true, message: 'Chat history fetched', result: messages };
     } catch (err: any) {
       console.error('❌ Error fetching chat messages:', err.message);
       return { status: false, message: err.message, result: [] };
+    }
+  }
+
+  @Get('contact-profile')
+  async getContactProfile(@Query('phone') phone: string, @Req() req: any) {
+    try {
+      const cleanPhone = (phone || '').replace(/\D/g, '');
+      const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+      const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+      const sender = currentUser?.primaryPhone || userPhone;
+
+      const sock = this.whatsappService.sessions.get(sender) || Array.from(this.whatsappService.sessions.values())[0];
+
+      if (!sock) return { status: true, result: { phone: cleanPhone, profilePicUrl: null } };
+
+      const jid = cleanPhone + '@s.whatsapp.net';
+      const picPromise = sock.profilePictureUrl(jid, 'image');
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2000));
+      const profilePicUrl = await Promise.race([picPromise, timeoutPromise]).catch(() => null);
+
+      return { status: true, result: { phone: cleanPhone, profilePicUrl: typeof profilePicUrl === 'string' ? profilePicUrl : null } };
+    } catch (e) {
+      return { status: true, result: { phone: phone, profilePicUrl: null } };
     }
   }
 

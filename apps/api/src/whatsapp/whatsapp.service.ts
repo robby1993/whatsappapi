@@ -20,6 +20,7 @@ import { proto } from '@whiskeysockets/baileys';
 export class WhatsappService implements OnModuleInit {
   public sessions = new Map<string, any>();
   public sessionStatus = new Map<string, any>();
+  public contactsMap = new Map<string, string>();
   private initializing = new Map<string, Promise<any>>();
   private loggingOut = new Set<string>();
 
@@ -180,10 +181,39 @@ export class WhatsappService implements OnModuleInit {
           }
         });
 
+        sock.ev.on('contacts.upsert', (contacts: any[]) => {
+          for (const c of contacts) {
+            const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
+            const name = c.name || c.notify || c.verifiedName;
+            if (clean && name) {
+              this.contactsMap.set(clean, name);
+            }
+          }
+        });
+
+        sock.ev.on('contacts.update', (updates: any[]) => {
+          for (const c of updates) {
+            const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
+            const name = c.name || c.notify || c.verifiedName;
+            if (clean && name) {
+              this.contactsMap.set(clean, name);
+            }
+          }
+        });
+
         sock.ev.on('messages.upsert', (m) => this.incomingMessageHandler.handle(cleanPhone, sock, m));
 
         (sock.ev as any).on('messaging-history.set', async (history: any) => {
-          console.log(`📜 History Sync (set) received for ${cleanPhone}: ${history.messages?.length || 0} messages`);
+          console.log(`📜 History Sync (set) received for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts`);
+          if (history.contacts && history.contacts.length > 0) {
+            for (const c of history.contacts) {
+              const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
+              const name = c.name || c.notify || c.verifiedName;
+              if (clean && name) {
+                this.contactsMap.set(clean, name);
+              }
+            }
+          }
           if (history.messages && history.messages.length > 0) {
             for (const msg of history.messages) {
               await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
@@ -192,7 +222,16 @@ export class WhatsappService implements OnModuleInit {
         });
 
         (sock.ev as any).on('messaging-history.sync', async (history: any) => {
-          console.log(`📜 History Sync (sync) received for ${cleanPhone}: ${history.messages?.length || 0} messages`);
+          console.log(`📜 History Sync (sync) received for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts`);
+          if (history.contacts && history.contacts.length > 0) {
+            for (const c of history.contacts) {
+              const clean = (c.id || '').replace(/@.*$/, '').replace(/\D/g, '');
+              const name = c.name || c.notify || c.verifiedName;
+              if (clean && name) {
+                this.contactsMap.set(clean, name);
+              }
+            }
+          }
           if (history.messages && history.messages.length > 0) {
             for (const msg of history.messages) {
               await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);

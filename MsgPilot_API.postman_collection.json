@@ -226,7 +226,7 @@
           }
         },
         {
-          "name": "Send Message (Defaults to Primary Sender)",
+          "name": "Send Message (Using Primary Number)",
           "request": {
             "method": "POST",
             "header": [
@@ -241,7 +241,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"9198000483847\",\n  \"message\": \"Hello via Primary WhatsApp Sender!\",\n  \"mediaUrl\": \"\",\n  \"mediaType\": \"image\"\n}"
+              "raw": "{\n  \"from\": \"919876543210\",\n  \"phone\": \"9198000483847\",\n  \"message\": \"Hello via Primary WhatsApp Sender!\",\n  \"mediaUrl\": \"\",\n  \"mediaType\": \"image\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/whatsapp/send-message",

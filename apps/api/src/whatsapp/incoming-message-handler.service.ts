@@ -50,11 +50,13 @@ export class IncomingMessageHandler {
       const receiver = isFromMe ? cleanRemote : cleanBotPhone;
       const status = isFromMe ? 'sent' : 'received';
       const msgId = msg.key?.id || `hist_${Date.now()}_${Math.random()}`;
+      const pushName = msg.pushName || null;
 
       const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
       if (!existing) {
         await this.messageLogModel.create({
           sender,
+          senderName: pushName,
           receiver,
           message: text,
           status,
@@ -96,18 +98,20 @@ export class IncomingMessageHandler {
           const receiver = isFromMe ? cleanRemote : cleanBotPhone;
           const status = isFromMe ? 'sent' : 'received';
           const msgId = msg.key?.id || `msg_${Date.now()}`;
+          const pushName = msg.pushName || null;
 
           const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
           if (!existing) {
             await this.messageLogModel.create({
               sender,
+              senderName: pushName,
               receiver,
               message: text,
               status,
               messageId: msgId,
               timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
             });
-            console.log(`💾 Saved message (${status}): ${sender} → ${receiver} ("${text.slice(0, 30)}")`);
+            console.log(`💾 Saved message (${status}): ${sender} (${pushName || 'Unknown'}) → ${receiver} ("${text.slice(0, 30)}")`);
           }
         }
 
