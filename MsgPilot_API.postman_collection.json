@@ -1,0 +1,832 @@
+{
+  "info": {
+    "_postman_id": "msgpilot-omnichannel-api-v2",
+    "name": "MsgPilot Omnichannel Messaging API (WhatsApp Web, WABA, RCS, Admin)",
+    "description": "Complete, updated Postman Collection for MsgPilot Platform featuring Primary Sender Auto-Routing, Media Attachments, Live Chat History, Baileys Automations, Meta WABA, Google RCS, and Admin System Management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication & User Profile",
+      "item": [
+        {
+          "name": "User Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"919876543210\",\n  \"name\": \"John Doe\",\n  \"gender\": \"Male\",\n  \"password\": \"Test@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "User Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"919876543210\",\n  \"password\": \"Test@123\",\n  \"userType\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "login"]
+            }
+          }
+        },
+        {
+          "name": "User Dashboard & Remaining Days",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Buy Subscription Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"starter-30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/buy-subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "buy-subscription"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. WhatsApp Web (Baileys Engine)",
+      "item": [
+        {
+          "name": "Get User Connected Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/user-sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "user-sessions"]
+            }
+          }
+        },
+        {
+          "name": "Set Primary Active Sender Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/set-primary",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "set-primary"]
+            }
+          }
+        },
+        {
+          "name": "Connect via 8-Digit Pairing Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/connect-pair",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "connect-pair"]
+            }
+          }
+        },
+        {
+          "name": "Connect via QR Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/connect-qr",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "connect-qr"]
+            }
+          }
+        },
+        {
+          "name": "Get Session Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/session-status?phone=919876543210",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "session-status"],
+              "query": [
+                {
+                  "key": "phone",
+                  "value": "919876543210"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Message (Defaults to Primary Sender)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9198000483847\",\n  \"message\": \"Hello via Primary WhatsApp Sender!\",\n  \"mediaUrl\": \"\",\n  \"mediaType\": \"image\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/send-message",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "send-message"]
+            }
+          }
+        },
+        {
+          "name": "Mass Broadcast Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numbers\": [\"9198000483847\", \"919988776655\"],\n  \"message\": \"Special Festival Discount: 50% Off!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "broadcast"]
+            }
+          }
+        },
+        {
+          "name": "Schedule Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9198000483847\",\n  \"message\": \"Appointment Reminder\",\n  \"scheduleTime\": 1750000000000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/schedule-message",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "schedule-message"]
+            }
+          }
+        },
+        {
+          "name": "Get Chats List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/chats",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "chats"]
+            }
+          }
+        },
+        {
+          "name": "Get Chat History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/chats/9198000483847",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "chats", "9198000483847"]
+            }
+          }
+        },
+        {
+          "name": "Disconnect WhatsApp Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["whatsapp", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Baileys Automations (ChatFlows)",
+      "item": [
+        {
+          "name": "Get All Auto-Responders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chatflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["chatflows"]
+            }
+          }
+        },
+        {
+          "name": "Create Keyword Auto-Responder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Auto-Reply: price, rate\",\n  \"triggerKeywords\": [\"price\", \"rate\", \"cost\"],\n  \"steps\": [\n    {\n      \"type\": \"text\",\n      \"message\": \"Our pricing starts at ₹499/mo.\"\n    }\n  ],\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chatflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["chatflows"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Auto-Responder Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chatflows/1/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["chatflows", "1", "toggle"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. WhatsApp Business API (Meta Cloud WABA)",
+      "item": [
+        {
+          "name": "Get Public WABA Config",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/waba/public-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "public-config"]
+            }
+          }
+        },
+        {
+          "name": "Get Connected WABA Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/waba/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "devices"]
+            }
+          }
+        },
+        {
+          "name": "Add WABA Device Manually",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"919876543210\",\n  \"phoneNumberId\": \"10482759283719\",\n  \"wabaAccountId\": \"1093847291823\",\n  \"accessToken\": \"EAAG...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waba/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "devices"]
+            }
+          }
+        },
+        {
+          "name": "Meta Embedded Signup Code Exchange",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"AQB...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waba/embedded-signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "embedded-signup"]
+            }
+          }
+        },
+        {
+          "name": "Sync Approved Meta Templates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waba/templates/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "templates", "sync"]
+            }
+          }
+        },
+        {
+          "name": "Send Single Meta Cloud Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"9198000483847\",\n  \"text\": \"Hello via Meta Cloud API!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waba/send-single",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "send-single"]
+            }
+          }
+        },
+        {
+          "name": "Send Dynamic Template Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"9198000483847\",\n  \"templateName\": \"hello_world\",\n  \"language\": \"en_US\",\n  \"parameters\": [\"John\", \"50% OFF\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waba/dynamic-message",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "dynamic-message"]
+            }
+          }
+        },
+        {
+          "name": "WABA Mass Broadcast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numbers\": [\"9198000483847\", \"919988776655\"],\n  \"templateName\": \"hello_world\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waba/bulk-messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["waba", "bulk-messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Google RCS Business Messaging",
+      "item": [
+        {
+          "name": "Get Connected RCS Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rcs/agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["rcs", "agents"]
+            }
+          }
+        },
+        {
+          "name": "Auto Provision Google RCS Agent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brandName\": \"Acme Retail\",\n  \"phone\": \"919876543210\",\n  \"category\": \"RETAIL\",\n  \"logoUrl\": \"https://example.com/logo.png\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rcs/agents/auto-provision",
+              "host": ["{{baseUrl}}"],
+              "path": ["rcs", "agents", "auto-provision"]
+            }
+          }
+        },
+        {
+          "name": "Send Single RCS Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"9198000483847\",\n  \"text\": \"Hello via Google RCS Rich Messaging!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rcs/send-single",
+              "host": ["{{baseUrl}}"],
+              "path": ["rcs", "send-single"]
+            }
+          }
+        },
+        {
+          "name": "Send RCS Dynamic Rich Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"9198000483847\",\n  \"title\": \"🎉 Festival Offer 50% OFF!\",\n  \"description\": \"Upgrade your plan today and save 50%.\",\n  \"mediaUrl\": \"https://example.com/banner.jpg\",\n  \"parameters\": { \"buttonLabel\": \"Claim Offer\" }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rcs/dynamic-card",
+              "host": ["{{baseUrl}}"],
+              "path": ["rcs", "dynamic-card"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. System Admin Controls",
+      "item": [
+        {
+          "name": "Get System Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get All Registered Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users"]
+            }
+          }
+        },
+        {
+          "name": "Update User Status, Validity & Channel Permissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"919876543210\",\n  \"isActive\": true,\n  \"validDays\": 60,\n  \"allowWebBaileys\": true,\n  \"allowWaba\": true,\n  \"allowRcs\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/update-user",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "update-user"]
+            }
+          }
+        },
+        {
+          "name": "Get System Integration Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "config"]
+            }
+          }
+        },
+        {
+          "name": "Save Integration Credentials (Razorpay & Meta)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpayKeyId\": \"rzp_live_12345\",\n  \"razorpayKeySecret\": \"secret123\",\n  \"metaAppId\": \"123456789012345\",\n  \"metaAppSecret\": \"metasecret123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "config"]
+            }
+          }
+        },
+        {
+          "name": "Export Full Database JSON Backup",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/backup-database",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "backup-database"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
