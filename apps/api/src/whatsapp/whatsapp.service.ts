@@ -24,6 +24,7 @@ export class WhatsappService implements OnModuleInit {
   public contactsMap = new Map<string, string>();
   private initializing = new Map<string, Promise<any>>();
   private loggingOut = new Set<string>();
+  private sessionOwners = new Map<string, string>();
 
   public registerContactName(phoneOrJid: string, rawName: string) {
     if (!phoneOrJid || !rawName) return;
@@ -52,8 +53,20 @@ export class WhatsappService implements OnModuleInit {
 
     for (const session of activeSessions) {
       console.log(`🔄 Restoring session: ${session.phone}`);
-      this.initWhatsApp(session.phone).catch(() => {});
+      this.initWhatsApp(session.phone, session.userNumber || undefined).catch(() => {});
     }
+  }
+
+  private rememberOwner(cleanPhone: string, ownerUserNumber?: string) {
+    const cleanOwner = ownerUserNumber ? ownerUserNumber.replace(/\D/g, '') : '';
+    if (cleanOwner) this.sessionOwners.set(cleanPhone, cleanOwner);
+    return this.sessionOwners.get(cleanPhone);
+  }
+
+  private patchStatus(cleanPhone: string, patch: Record<string, any>) {
+    const prev = this.sessionStatus.get(cleanPhone) || {};
+    const ownerUserNumber = this.sessionOwners.get(cleanPhone) || prev.ownerUserNumber;
+    this.sessionStatus.set(cleanPhone, { ...prev, ...patch, ownerUserNumber });
   }
 
   async initWhatsApp(phone: string, ownerUserNumber?: string): Promise<any> {
@@ -70,6 +83,8 @@ export class WhatsappService implements OnModuleInit {
         }
     }
 
+    const owner = this.rememberOwner(cleanPhone, ownerUserNumber);
+
     const promise = (async () => {
       try {
         // Force cleanup of old session if it exists
@@ -83,7 +98,7 @@ export class WhatsappService implements OnModuleInit {
         }
 
         console.log(`🔌 Initializing WhatsApp session: ${cleanPhone}`);
-        const { state, saveCreds } = await this.postgresAuthService.getAuthState(cleanPhone, ownerUserNumber);
+        const { state, saveCreds } = await this.postgresAuthService.getAuthState(cleanPhone, owner);
         console.log(`🔑 Auth State loaded for: ${cleanPhone}`);
 
         // Get version with a faster fallback and retry
@@ -146,7 +161,7 @@ export class WhatsappService implements OnModuleInit {
         });
 
         this.sessions.set(cleanPhone, sock);
-        this.sessionStatus.set(cleanPhone, { status: 'connecting' });
+        this.patchStatus(cleanPhone, { status: 'connecting' });
 
         sock.ev.on('creds.update', async (update) => {
           Object.assign(state.creds, update);
@@ -154,17 +169,13 @@ export class WhatsappService implements OnModuleInit {
         });
 
         sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-          const status = this.sessionStatus.get(cleanPhone) || { status: 'connecting' };
-
           if (qr) {
-            status.qr = qr;
-            status.status = 'pairing';
-            this.sessionStatus.set(cleanPhone, status);
+            this.patchStatus(cleanPhone, { qr, status: 'pairing' });
             console.log(`📸 New QR Code generated for: ${cleanPhone}`);
           }
 
           if (connection === 'open') {
-            this.sessionStatus.set(cleanPhone, { status: 'connected', qr: null, pairingCode: null });
+            this.patchStatus(cleanPhone, { status: 'connected', qr: null, pairingCode: null });
             console.log(`✅ WhatsApp Connected: ${cleanPhone}`);
           }
 
@@ -179,15 +190,16 @@ export class WhatsappService implements OnModuleInit {
             if (isLoggedOut) {
               console.log(`🔒 Session logged out / unlinked for ${cleanPhone}. Cleaning up session data.`);
               this.sessionStatus.delete(cleanPhone);
+              this.sessionOwners.delete(cleanPhone);
               this.sessionModel.destroy({ where: { phone: cleanPhone } }).catch(() => {});
             } else if (reason === 515 || reason === DisconnectReason.restartRequired) {
               console.log(`🔄 Restart required (${reason}) for ${cleanPhone}, reconnecting now...`);
               setTimeout(() => this.initWhatsApp(cleanPhone).catch(() => {}), 1000);
             } else if (reason === DisconnectReason.connectionReplaced || reason === 440) {
               console.log(`⚠️ Connection conflict (440) for ${cleanPhone}: Session opened on another server/instance. Pausing auto-reconnect to prevent conflict loop.`);
-              this.sessionStatus.set(cleanPhone, { ...status, status: 'disconnected', reason: 'Connection conflict (440)' });
+              this.patchStatus(cleanPhone, { status: 'disconnected', reason: 'Connection conflict (440)' });
             } else {
-              this.sessionStatus.set(cleanPhone, { ...status, status: 'disconnected' });
+              this.patchStatus(cleanPhone, { status: 'disconnected' });
               setTimeout(() => this.initWhatsApp(cleanPhone), 5000);
             }
           }
@@ -280,8 +292,10 @@ export class WhatsappService implements OnModuleInit {
       } catch (e) {}
 
       this.sessions.delete(cleanPhone);
-      this.sessionStatus.delete(cleanPhone);
     }
+
+    this.sessionStatus.delete(cleanPhone);
+    this.sessionOwners.delete(cleanPhone);
 
     // Completely purge session credentials & auth state from database
     await this.sessionModel.destroy({ where: { phone: cleanPhone } });

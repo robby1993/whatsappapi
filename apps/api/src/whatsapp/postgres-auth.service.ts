@@ -14,7 +14,7 @@ export class PostgresAuthService {
 
   async getAuthState(phone: string, ownerUserNumber?: string): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> {
     const cleanPhone = phone.replace(/\D/g, '');
-    const cleanOwner = ownerUserNumber ? ownerUserNumber.replace(/\D/g, '') : cleanPhone;
+    const cleanOwner = ownerUserNumber ? ownerUserNumber.replace(/\D/g, '') : '';
 
     const writeData = async (data: any, type: string, id: string) => {
       const queueKey = `${cleanPhone}:${type}:${id}`;
@@ -27,7 +27,7 @@ export class PostgresAuthService {
 
           const [session, created] = await this.sessionModel.findOrCreate({
             where: { phone: cleanPhone, dataType: type, dataId: id },
-            defaults: { data: sData, userNumber: cleanOwner }
+            defaults: { data: sData, userNumber: cleanOwner || null }
           });
 
           if (!created) {
