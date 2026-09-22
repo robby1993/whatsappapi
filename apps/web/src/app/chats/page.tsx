@@ -605,6 +605,12 @@ export default function BaileysChatsPage() {
                               </p>
                             )}
 
+                            {!m.mediaUrl && m.mediaType && (
+                              <p className="text-xs text-[#667781] italic">
+                                {m.mediaType === 'image' ? 'Photo' : m.mediaType === 'video' ? 'Video' : m.mediaType === 'audio' ? 'Voice message' : 'Document'}
+                              </p>
+                            )}
+
                             {/* Media Display */}
                             {m.mediaUrl && (
                               <div className="rounded-lg overflow-hidden mb-1 border border-black/10">

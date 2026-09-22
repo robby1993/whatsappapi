@@ -30,6 +30,8 @@ export class WhatsappService implements OnModuleInit {
   private sessionOwners = new Map<string, string>();
   private lidToPhone = new Map<string, string>();
   private nameSyncStarted = new Set<string>();
+  private mediaSyncStarted = new Set<string>();
+  private lastMediaPhone = '';
   private pendingNameLookups = new Map<string, string>();
 
   public phoneFromJid(value: string): string {
@@ -110,6 +112,65 @@ export class WhatsappService implements OnModuleInit {
       }
     }
     return false;
+  }
+
+  private stampPhoneJid(accountPhone: string, msg: any, fallbackPhone?: string) {
+    if (!msg?.key) return '';
+    const phone = this.phoneFromJid(msg.key.remoteJid || '')
+      || this.resolvePhone(accountPhone, msg.key.remoteJid || '')
+      || this.phoneFromJid(msg.key.senderPn || '')
+      || this.phoneFromJid(msg.key.participantPn || '')
+      || this.phoneFromJid(msg.key.remoteJidAlt || '')
+      || this.pendingNameLookups.get(msg.key.id)
+      || (fallbackPhone ? this.phoneFromJid(fallbackPhone) : '');
+    if (phone && !this.phoneFromJid(msg.key.remoteJid || '')) {
+      msg.key.remoteJid = `${phone}@s.whatsapp.net`;
+    }
+    return phone;
+  }
+
+  async requestChatMedia(accountPhone: string, otherPhone: string) {
+    const account = String(accountPhone || '').replace(/\D/g, '');
+    const other = String(otherPhone || '').replace(/\D/g, '');
+    const key = `${account}:${other}`;
+    if (!account || !other || this.mediaSyncStarted.has(key)) return;
+    const sock = this.sessions.get(account);
+    if (!sock?.fetchMessageHistory) return;
+    this.mediaSyncStarted.add(key);
+
+    const incoming = await this.messageLogModel.findOne({
+      where: { sender: other, receiver: account, messageId: { [Op.ne]: null } },
+      order: [['createdAt', 'DESC']],
+    });
+    const log = incoming || await this.messageLogModel.findOne({
+      where: { sender: account, receiver: other, messageId: { [Op.ne]: null } },
+      order: [['createdAt', 'DESC']],
+    });
+    if (!log?.messageId) {
+      this.mediaSyncStarted.delete(key);
+      return;
+    }
+
+    const rawTime = Number(log.timestamp || 0);
+    const oldestMs = rawTime > 100000000000 ? rawTime : rawTime * 1000;
+    try {
+      const requestId = await sock.fetchMessageHistory(
+        80,
+        {
+          remoteJid: `${other}@s.whatsapp.net`,
+          fromMe: log.sender === account,
+          id: log.messageId,
+        },
+        oldestMs || new Date(log.createdAt).getTime(),
+      );
+      this.pendingNameLookups.set(log.messageId, other);
+      if (requestId) this.pendingNameLookups.set(String(requestId), other);
+      this.lastMediaPhone = other;
+      console.log(`📎 Asked WhatsApp for media in chat ${other}`);
+    } catch (err: any) {
+      this.mediaSyncStarted.delete(key);
+      console.error(`Media request failed for ${other}:`, err?.message || err);
+    }
   }
 
   private resolvePhone(accountPhone: string, jid: string): string {
@@ -210,56 +271,6 @@ export class WhatsappService implements OnModuleInit {
       if (ready > 0) break;
     }
 
-    await this.fetchMissingPushNames(cleanPhone, sock);
-  }
-
-  private async fetchMissingPushNames(cleanPhone: string, sock: any) {
-    if (!sock?.fetchMessageHistory) return;
-    const saved = await this.contactNameModel.findAll({
-      where: { accountPhone: cleanPhone },
-      attributes: ['phone'],
-    });
-    const named = new Set(saved.map((row) => row.phone));
-    const logs = await this.messageLogModel.findAll({
-      where: { [Op.or]: [{ sender: cleanPhone }, { receiver: cleanPhone }] },
-      attributes: ['messageId', 'sender', 'receiver', 'createdAt'],
-      order: [['createdAt', 'ASC']],
-    });
-
-    const oldest = new Map<string, MessageLog>();
-    for (const log of logs) {
-      const incoming = log.receiver === cleanPhone;
-      const other = incoming ? log.sender : log.receiver;
-      const phone = String(other || '').replace(/\D/g, '');
-      if (!phone || phone === cleanPhone || named.has(phone) || !log.messageId) continue;
-      if (phone.length < 10 || phone.length > 15) continue;
-      const current = oldest.get(phone);
-      if (!current || (incoming && current.sender === cleanPhone)) oldest.set(phone, log);
-    }
-
-    let asked = 0;
-    for (const [phone, log] of oldest) {
-      if (this.sessions.get(cleanPhone) !== sock) return;
-      try {
-        const requestId = await sock.fetchMessageHistory(
-          50,
-          {
-            remoteJid: `${phone}@s.whatsapp.net`,
-            fromMe: log.sender === cleanPhone,
-            id: log.messageId,
-          },
-          new Date(log.createdAt).getTime(),
-        );
-        this.pendingNameLookups.set(log.messageId, phone);
-        if (requestId) this.pendingNameLookups.set(String(requestId), phone);
-        asked++;
-      } catch (err: any) {
-        console.error(`Name lookup failed for ${phone}:`, err?.message || err);
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-    console.log(`📜 Asked WhatsApp for names in ${asked} chats`);
   }
 
   public contactDisplayName(accountPhone: string, phone: string) {
@@ -473,7 +484,10 @@ export class WhatsappService implements OnModuleInit {
           if (lidName) this.registerContactName(phone, lidName, cleanPhone);
         });
 
-        sock.ev.on('messages.upsert', (m) => this.incomingMessageHandler.handle(cleanPhone, sock, m));
+        sock.ev.on('messages.upsert', (m) => {
+          for (const msg of m.messages || []) this.stampPhoneJid(cleanPhone, msg);
+          this.incomingMessageHandler.handle(cleanPhone, sock, m);
+        });
 
         const saveHistory = async (history: any, label: string) => {
           const sample = history.chats?.[0];
@@ -485,10 +499,11 @@ export class WhatsappService implements OnModuleInit {
             console.log(`📜 Sample chat id=${sample.id} name=${sample.name || sample.displayName || ''} pn=${sample.pnJid || ''}`);
           }
           if (sampleMsg) {
-            console.log(`📜 Sample message push=${sampleMsg.pushName || ''} jid=${sampleMsg.key?.remoteJid || ''} pn=${sampleMsg.key?.senderPn || sampleMsg.key?.participantPn || ''}`);
+            console.log(`📜 Sample message push=${sampleMsg.pushName || ''} jid=${sampleMsg.key?.remoteJid || ''} pn=${sampleMsg.key?.senderPn || sampleMsg.key?.participantPn || ''} keys=${Object.keys(sampleMsg.message || {}).join(',')}`);
           }
           const requestedPhone = this.pendingNameLookups.get(history.peerDataRequestSessionId)
-            || history.messages?.map((msg: any) => this.pendingNameLookups.get(msg.key?.id)).find(Boolean);
+            || history.messages?.map((msg: any) => this.pendingNameLookups.get(msg.key?.id)).find(Boolean)
+            || ((history.chats?.length || 0) <= 1 ? this.lastMediaPhone : '');
           const historyName = sample?.name || sample?.displayName
             || history.contacts?.find((contact: any) => contact?.name || contact?.notify)?.name
             || history.contacts?.find((contact: any) => contact?.notify)?.notify
@@ -504,13 +519,16 @@ export class WhatsappService implements OnModuleInit {
           }
           if (history.messages && history.messages.length > 0) {
             for (const msg of history.messages) {
-              if (!msg.key?.fromMe && msg.pushName) {
-                const phone = this.resolvePhone(cleanPhone, msg.key?.remoteJid)
-                  || this.phoneFromJid(msg.key?.senderPn || '')
-                  || this.phoneFromJid(msg.key?.participantPn || '')
-                  || this.pendingNameLookups.get(msg.key?.id)
-                  || requestedPhone;
-                if (phone) this.registerContactName(phone, msg.pushName, cleanPhone);
+              const fallback = this.pendingNameLookups.get(msg.key?.id) || requestedPhone;
+              const phone = this.stampPhoneJid(cleanPhone, msg, fallback);
+              const kind = msg.message?.imageMessage ? 'image'
+                : msg.message?.videoMessage ? 'video'
+                : msg.message?.audioMessage ? 'audio'
+                : msg.message?.documentMessage ? 'document'
+                : '';
+              if (kind) console.log(`📎 History ${kind} ${msg.key?.id} -> ${phone || 'no phone'}`);
+              if (!msg.key?.fromMe && msg.pushName && phone) {
+                this.registerContactName(phone, msg.pushName, cleanPhone);
               }
               await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg, sock);
             }

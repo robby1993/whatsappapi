@@ -180,19 +180,21 @@ export class IncomingMessageHandler {
       if (Object.keys(updates).length) await existing.update(updates);
     }
 
-    const ageSeconds = timestamp > 100000000000 ? timestamp / 1000 : timestamp;
-    const recent = !ageSeconds || ageSeconds > Date.now() / 1000 - 21 * 24 * 3600;
-    if (media && sock && !row.mediaUrl && (awaitDownload || recent)) {
+    if (media && sock && !row.mediaUrl) {
       const task = () => this.downloadMessageMedia(sock, msg, msgContent, msgId);
-      if (awaitDownload) await task().catch(() => undefined);
-      else this.mediaChain = this.mediaChain.then(task).catch(() => undefined);
+      if (awaitDownload) await task().catch((err: any) => {
+        console.error(`Media download failed for ${msgId}:`, err?.message || err);
+      });
+      else this.mediaChain = this.mediaChain.then(task).catch((err: any) => {
+        console.error(`Media download failed for ${msgId}:`, err?.message || err);
+      });
     }
 
     return { text };
   }
 
-  private async downloadMessageMedia(sock: any, msg: any, msgContent: any, msgId: string) {
-    const buffer = await downloadMediaMessage(
+  private fetchMediaBuffer(sock: any, msg: any) {
+    return downloadMediaMessage(
       msg,
       'buffer',
       {},
@@ -201,6 +203,18 @@ export class IncomingMessageHandler {
         reuploadRequest: (message: any) => sock.updateMediaMessage(message),
       },
     );
+  }
+
+  private async downloadMessageMedia(sock: any, msg: any, msgContent: any, msgId: string) {
+    let buffer: Buffer;
+    try {
+      buffer = await this.fetchMediaBuffer(sock, msg);
+    } catch (err: any) {
+      const status = err?.response?.status || err?.output?.statusCode;
+      if (![403, 404, 410].includes(status) || !sock?.updateMediaMessage) throw err;
+      const refreshed = await sock.updateMediaMessage(msg);
+      buffer = await this.fetchMediaBuffer(sock, refreshed);
+    }
     let ext = '.bin';
     try {
       const rawExt = extensionForMediaMessage(msgContent) || '.bin';
@@ -216,6 +230,7 @@ export class IncomingMessageHandler {
       { mediaUrl: `${apiUrl}/uploads/${filename}`, mediaType: kind?.type || 'document' },
       { where: { messageId: msgId } },
     );
+    console.log(`📎 Saved ${kind?.type || 'file'} for ${msgId}`);
   }
 
   private async processSession(sock: any, session: ChatSession, userInput: string) {
@@ -346,11 +361,19 @@ export class IncomingMessageHandler {
   }
 
   private unwrapMessage(msg: any): any {
-    if (msg.ephemeralMessage) return msg.ephemeralMessage.message;
-    if (msg.viewOnceMessage) return msg.viewOnceMessage.message;
-    if (msg.viewOnceMessageV2) return msg.viewOnceMessageV2.message;
-    if (msg.documentWithCaptionMessage) return msg.documentWithCaptionMessage.message;
-    return msg;
+    let current = msg;
+    for (let i = 0; i < 5 && current; i++) {
+      const nested = current.ephemeralMessage?.message
+        || current.viewOnceMessage?.message
+        || current.viewOnceMessageV2?.message
+        || current.viewOnceMessageV2Extension?.message
+        || current.documentWithCaptionMessage?.message
+        || current.editedMessage?.message
+        || null;
+      if (!nested) break;
+      current = nested;
+    }
+    return current;
   }
 
   private extractText(msgContent: any): string {

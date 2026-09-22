@@ -568,6 +568,8 @@ export class WhatsappController {
         return { status: true, message: 'No WhatsApp connection', result: { messages: [], connectedPhone: activePhone } };
       }
 
+      this.whatsappService.requestChatMedia(activePhone, cleanOther).catch(() => {});
+
       const messages = await this.messageLogModel.findAll({
         where: {
           [Op.or]: [
