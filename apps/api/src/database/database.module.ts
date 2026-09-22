@@ -22,6 +22,7 @@ import { RcsTemplate } from './models/RcsTemplate';
 import { RcsCampaign } from './models/RcsCampaign';
 import { RcsAutomation } from './models/RcsAutomation';
 import { RcsFlow } from './models/RcsFlow';
+import { ContactName } from './models/ContactName';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { RcsFlow } from './models/RcsFlow';
             RcsCampaign,
             RcsAutomation,
             RcsFlow,
+            ContactName,
           ],
           autoLoadModels: true,
           synchronize: true,
@@ -103,6 +105,7 @@ import { RcsFlow } from './models/RcsFlow';
       RcsCampaign,
       RcsAutomation,
       RcsFlow,
+      ContactName,
     ]),
   ],
   exports: [SequelizeModule],

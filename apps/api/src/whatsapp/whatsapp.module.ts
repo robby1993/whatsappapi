@@ -11,10 +11,11 @@ import { MessageLog } from '../database/models/MessageLog';
 import { Stat } from '../database/models/Stat';
 import { ChatSession } from '../database/models/ChatSession';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
+import { ContactName } from '../database/models/ContactName';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([Session, User, ChatFlow, ChatSession, MessageLog, Stat, ScheduledMessage]),
+    SequelizeModule.forFeature([Session, User, ChatFlow, ChatSession, MessageLog, Stat, ScheduledMessage, ContactName]),
   ],
   providers: [
     WhatsappService,

@@ -5,9 +5,11 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers,
   WAVersion,
+  jidNormalizedUser,
 } from '@whiskeysockets/baileys';
 import { Session } from '../database/models/Session';
 import { MessageLog } from '../database/models/MessageLog';
+import { ContactName } from '../database/models/ContactName';
 import { PostgresAuthService } from './postgres-auth.service';
 import { IncomingMessageHandler } from './incoming-message-handler.service';
 import { WhatsappUtils } from './whatsapp-utils';
@@ -16,6 +18,7 @@ import { join } from 'path';
 import * as fs from 'fs';
 import pino from 'pino';
 import { proto } from '@whiskeysockets/baileys';
+import { Op } from 'sequelize';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -25,15 +28,244 @@ export class WhatsappService implements OnModuleInit {
   private initializing = new Map<string, Promise<any>>();
   private loggingOut = new Set<string>();
   private sessionOwners = new Map<string, string>();
+  private lidToPhone = new Map<string, string>();
+  private nameSyncStarted = new Set<string>();
+  private pendingNameLookups = new Map<string, string>();
 
-  public registerContactName(phoneOrJid: string, rawName: string) {
-    if (!phoneOrJid || !rawName) return;
-    const cleanPhone = String(phoneOrJid).replace(/@.*$/, '').replace(/\D/g, '');
-    const cleanName = String(rawName).trim();
+  public phoneFromJid(value: string): string {
+    const jid = String(value || '');
+    if (!jid || jid.endsWith('@lid') || jid.endsWith('@g.us') || jid.endsWith('@broadcast')) return '';
+    const user = jid.replace(/@.*$/, '').split(':')[0];
+    const digits = user.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) return '';
+    return digits;
+  }
 
-    if (cleanPhone && cleanPhone.length >= 10 && cleanPhone.length <= 13 && cleanName && !cleanName.startsWith('+')) {
-      this.contactsMap.set(cleanPhone, cleanName);
+  public registerContactName(phoneOrJid: string, rawName: string, accountPhone?: string) {
+    const cleanPhone = this.phoneFromJid(phoneOrJid);
+    const cleanName = String(rawName || '').trim();
+    if (!cleanPhone || !cleanName || cleanName.startsWith('+') || /^\d+$/.test(cleanName)) return;
+
+    const account = accountPhone ? this.phoneFromJid(accountPhone) || accountPhone.replace(/\D/g, '') : '';
+    if (account) this.contactsMap.set(`${account}:${cleanPhone}`, cleanName);
+    this.contactsMap.set(cleanPhone, cleanName);
+
+    if (account) {
+      this.contactNameModel.upsert({ accountPhone: account, phone: cleanPhone, name: cleanName }).catch((err: any) => {
+        console.error(`Contact name save failed for ${cleanPhone}:`, err?.message || err);
+      });
     }
+  }
+
+  public rememberContact(accountPhone: string, contact: any) {
+    if (!contact) return false;
+    const name = contact.name || contact.notify || contact.verifiedName || contact.short || contact.pushname || contact.pushName;
+    if (!name) return false;
+
+    const phone = this.phoneFromJid(contact.jid || '')
+      || this.phoneFromJid(contact.phoneNumber || '')
+      || this.phoneFromJid(contact.id || '');
+    const lid = String(contact.lid || (String(contact.id || '').endsWith('@lid') ? contact.id : ''))
+      .replace(/@.*$/, '')
+      .split(':')[0]
+      .replace(/\D/g, '');
+    const account = String(accountPhone || '').replace(/\D/g, '');
+
+    if (lid && phone) this.lidToPhone.set(`${account}:${lid}`, phone);
+    if (lid) this.contactsMap.set(`${account}:lid:${lid}`, String(name).trim());
+    if (lid && !phone) {
+      const mapped = this.lidToPhone.get(`${account}:${lid}`);
+      if (mapped) this.registerContactName(mapped, name, accountPhone);
+    }
+    if (phone) {
+      this.registerContactName(phone, name, accountPhone);
+      return true;
+    }
+    return false;
+  }
+
+  public rememberChat(accountPhone: string, chat: any) {
+    if (!chat?.name && !chat?.displayName) return false;
+    const phone = this.phoneFromJid(chat.id || '')
+      || this.phoneFromJid(chat.newJid || '')
+      || this.phoneFromJid(chat.oldJid || '')
+      || this.phoneFromJid(chat.pnJid || '');
+    const lid = String(chat.lid || (String(chat.id || '').endsWith('@lid') ? chat.id : ''))
+      .replace(/@.*$/, '')
+      .split(':')[0]
+      .replace(/\D/g, '');
+    const account = String(accountPhone || '').replace(/\D/g, '');
+    if (lid && phone) this.lidToPhone.set(`${account}:${lid}`, phone);
+    const displayName = chat.name || chat.displayName;
+    if (phone && displayName) {
+      this.registerContactName(phone, displayName, accountPhone);
+      return true;
+    }
+
+    if (lid) {
+      const mapped = this.lidToPhone.get(`${account}:${lid}`);
+      if (mapped && displayName) {
+        this.registerContactName(mapped, displayName, accountPhone);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private resolvePhone(accountPhone: string, jid: string): string {
+    const direct = this.phoneFromJid(jid);
+    if (direct) return direct;
+    const lid = String(jid || '').replace(/@.*$/, '').split(':')[0].replace(/\D/g, '');
+    const account = String(accountPhone || '').replace(/\D/g, '');
+    if (!lid) return '';
+    return this.lidToPhone.get(`${account}:${lid}`) || '';
+  }
+
+  private async requestContactNames(cleanPhone: string, sock: any) {
+    if (this.nameSyncStarted.has(cleanPhone)) return;
+    if (!sock?.user?.id || this.sessions.get(cleanPhone) !== sock) return;
+    this.nameSyncStarted.add(cleanPhone);
+
+    const meJid = jidNormalizedUser(sock.user.id);
+    const requestedKeys = new Set<string>(['AAAAAJR3', 'AAAAAJR4']);
+
+    const askForKeys = async (ids: string[]) => {
+      if (!ids.length || !sock.relayMessage) return;
+      await sock.relayMessage(
+        meJid,
+        {
+          protocolMessage: {
+            type: proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST,
+            appStateSyncKeyRequest: {
+              keyIds: ids.map((id) => ({ keyId: Buffer.from(id, 'base64') })),
+            },
+          },
+        },
+        { additionalAttributes: { category: 'peer', push_priority: 'high_force' } },
+      );
+      console.log(`🔑 Asked the phone for contact-list keys: ${ids.join(', ')}`);
+    };
+
+    try {
+      await askForKeys([...requestedKeys]);
+    } catch (err: any) {
+      console.error('Contact key request failed:', err?.message || err);
+    }
+
+    try {
+      await sock.sendPeerDataOperationMessage({
+        fullHistorySyncOnDemandRequest: {
+          requestMetadata: { requestId: `names-${Date.now()}` },
+          historySyncConfig: {
+            fullSyncDaysLimit: 3650,
+            fullSyncSizeMbLimit: 1024,
+            storageQuotaMb: 10240,
+            inlineInitialPayloadInE2EeMsg: true,
+            recentSyncDaysLimit: 30,
+          },
+        },
+        peerDataOperationRequestType: proto.Message.PeerDataOperationRequestType.FULL_HISTORY_SYNC_ON_DEMAND,
+      });
+      console.log(`📜 Asked the phone to resend chats so names can be saved`);
+    } catch (err: any) {
+      console.error('Chat history request failed:', err?.message || err);
+    }
+
+    const collections = ['critical_block', 'critical_unblock_low', 'regular_high', 'regular', 'regular_low'];
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      if (this.sessions.get(cleanPhone) !== sock) return;
+      try { sock.ev.flush(); } catch {}
+
+      const stored = await this.contactNameModel.count({ where: { accountPhone: cleanPhone } });
+      if (stored > 0) {
+        console.log(`👤 Contact names stored for ${cleanPhone}: ${stored}`);
+        break;
+      }
+
+      const keyCount = await this.sessionModel.count({
+        where: { phone: cleanPhone, dataType: 'app-state-sync-key' },
+      });
+      if (!keyCount) {
+        console.log(`🔑 Waiting for contact-list keys (${attempt}/8)`);
+        continue;
+      }
+
+      try {
+        await sock.resyncAppState(collections, false);
+      } catch (err: any) {
+        const message = String(err?.message || err);
+        console.error('Address book read failed:', message);
+        const match = message.match(/failed to find key "([^"]+)"/);
+        if (match && !requestedKeys.has(match[1])) {
+          requestedKeys.add(match[1]);
+          await askForKeys([match[1]]).catch(() => {});
+        }
+      } finally {
+        try { sock.ev.flush(); } catch {}
+      }
+
+      const ready = await this.contactNameModel.count({ where: { accountPhone: cleanPhone } });
+      console.log(`📒 Address book read for ${cleanPhone}. Names stored: ${ready}`);
+      if (ready > 0) break;
+    }
+
+    await this.fetchMissingPushNames(cleanPhone, sock);
+  }
+
+  private async fetchMissingPushNames(cleanPhone: string, sock: any) {
+    if (!sock?.fetchMessageHistory) return;
+    const saved = await this.contactNameModel.findAll({
+      where: { accountPhone: cleanPhone },
+      attributes: ['phone'],
+    });
+    const named = new Set(saved.map((row) => row.phone));
+    const logs = await this.messageLogModel.findAll({
+      where: { [Op.or]: [{ sender: cleanPhone }, { receiver: cleanPhone }] },
+      attributes: ['messageId', 'sender', 'receiver', 'createdAt'],
+      order: [['createdAt', 'ASC']],
+    });
+
+    const oldest = new Map<string, MessageLog>();
+    for (const log of logs) {
+      const incoming = log.receiver === cleanPhone;
+      const other = incoming ? log.sender : log.receiver;
+      const phone = String(other || '').replace(/\D/g, '');
+      if (!phone || phone === cleanPhone || named.has(phone) || !log.messageId) continue;
+      if (phone.length < 10 || phone.length > 15) continue;
+      const current = oldest.get(phone);
+      if (!current || (incoming && current.sender === cleanPhone)) oldest.set(phone, log);
+    }
+
+    let asked = 0;
+    for (const [phone, log] of oldest) {
+      if (this.sessions.get(cleanPhone) !== sock) return;
+      try {
+        const requestId = await sock.fetchMessageHistory(
+          50,
+          {
+            remoteJid: `${phone}@s.whatsapp.net`,
+            fromMe: log.sender === cleanPhone,
+            id: log.messageId,
+          },
+          new Date(log.createdAt).getTime(),
+        );
+        this.pendingNameLookups.set(log.messageId, phone);
+        if (requestId) this.pendingNameLookups.set(String(requestId), phone);
+        asked++;
+      } catch (err: any) {
+        console.error(`Name lookup failed for ${phone}:`, err?.message || err);
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    console.log(`📜 Asked WhatsApp for names in ${asked} chats`);
+  }
+
+  public contactDisplayName(accountPhone: string, phone: string) {
+    const account = (accountPhone || '').replace(/\D/g, '');
+    const clean = (phone || '').replace(/\D/g, '');
+    return this.contactsMap.get(`${account}:${clean}`) || this.contactsMap.get(clean) || null;
   }
 
   constructor(
@@ -41,6 +273,8 @@ export class WhatsappService implements OnModuleInit {
     private sessionModel: typeof Session,
     @InjectModel(MessageLog)
     private messageLogModel: typeof MessageLog,
+    @InjectModel(ContactName)
+    private contactNameModel: typeof ContactName,
     private postgresAuthService: PostgresAuthService,
     private incomingMessageHandler: IncomingMessageHandler,
   ) {}
@@ -177,6 +411,11 @@ export class WhatsappService implements OnModuleInit {
           if (connection === 'open') {
             this.patchStatus(cleanPhone, { status: 'connected', qr: null, pairingCode: null });
             console.log(`✅ WhatsApp Connected: ${cleanPhone}`);
+            setTimeout(() => {
+              this.requestContactNames(cleanPhone, sock).catch((err) => {
+                console.error(`Contact name sync failed for ${cleanPhone}:`, err?.message || err);
+              });
+            }, 25000);
           }
 
           if (connection === 'close') {
@@ -184,6 +423,7 @@ export class WhatsappService implements OnModuleInit {
             console.log(`❌ Connection closed for ${cleanPhone}. Reason: ${reason}`);
 
             this.sessions.delete(cleanPhone);
+            this.nameSyncStarted.delete(cleanPhone);
 
             const isLoggedOut = reason === DisconnectReason.loggedOut || reason === 401 || this.loggingOut.has(cleanPhone);
 
@@ -191,6 +431,7 @@ export class WhatsappService implements OnModuleInit {
               console.log(`🔒 Session logged out / unlinked for ${cleanPhone}. Cleaning up session data.`);
               this.sessionStatus.delete(cleanPhone);
               this.sessionOwners.delete(cleanPhone);
+              this.nameSyncStarted.delete(cleanPhone);
               this.sessionModel.destroy({ where: { phone: cleanPhone } }).catch(() => {});
             } else if (reason === 515 || reason === DisconnectReason.restartRequired) {
               console.log(`🔄 Restart required (${reason}) for ${cleanPhone}, reconnecting now...`);
@@ -205,57 +446,81 @@ export class WhatsappService implements OnModuleInit {
           }
         });
 
-        sock.ev.on('contacts.upsert', (contacts: any[]) => {
-          for (const c of contacts) {
-            const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
-            this.registerContactName(c.id || c.jid || c.phone, name);
+        const saveContacts = (contacts: any[], label: string) => {
+          let saved = 0;
+          for (const contact of contacts || []) {
+            if (this.rememberContact(cleanPhone, contact)) saved++;
           }
-        });
+          if (saved) console.log(`👤 Saved ${saved} ${label} names for ${cleanPhone}`);
+        };
 
-        sock.ev.on('contacts.update', (updates: any[]) => {
-          for (const c of updates) {
-            const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
-            this.registerContactName(c.id || c.jid || c.phone, name);
-          }
+        sock.ev.on('contacts.upsert', (contacts: any[]) => saveContacts(contacts, 'contact'));
+        sock.ev.on('contacts.update', (updates: any[]) => saveContacts(updates, 'contact'));
+        sock.ev.on('chats.upsert', (chats: any[]) => {
+          let saved = 0;
+          for (const chat of chats || []) if (this.rememberChat(cleanPhone, chat)) saved++;
+          if (saved) console.log(`👤 Saved ${saved} chat names for ${cleanPhone}`);
+        });
+        sock.ev.on('chats.update', (chats: any[]) => {
+          for (const chat of chats || []) this.rememberChat(cleanPhone, chat);
+        });
+        sock.ev.on('chats.phoneNumberShare', ({ lid, jid }: { lid: string; jid: string }) => {
+          const phone = this.phoneFromJid(jid);
+          const lidDigits = String(lid || '').replace(/@.*$/, '').split(':')[0].replace(/\D/g, '');
+          if (!phone || !lidDigits) return;
+          this.lidToPhone.set(`${cleanPhone}:${lidDigits}`, phone);
+          const lidName = this.contactsMap.get(`${cleanPhone}:lid:${lidDigits}`);
+          if (lidName) this.registerContactName(phone, lidName, cleanPhone);
         });
 
         sock.ev.on('messages.upsert', (m) => this.incomingMessageHandler.handle(cleanPhone, sock, m));
 
-        (sock.ev as any).on('messaging-history.set', async (history: any) => {
-          console.log(`📜 History Sync (set) received for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts`);
+        const saveHistory = async (history: any, label: string) => {
+          const sample = history.chats?.[0];
+          const sampleMsg = history.messages?.[0];
+          console.log(
+            `📜 History Sync (${label}) for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts, ${history.chats?.length || 0} chats`,
+          );
+          if (sample) {
+            console.log(`📜 Sample chat id=${sample.id} name=${sample.name || sample.displayName || ''} pn=${sample.pnJid || ''}`);
+          }
+          if (sampleMsg) {
+            console.log(`📜 Sample message push=${sampleMsg.pushName || ''} jid=${sampleMsg.key?.remoteJid || ''} pn=${sampleMsg.key?.senderPn || sampleMsg.key?.participantPn || ''}`);
+          }
+          const requestedPhone = this.pendingNameLookups.get(history.peerDataRequestSessionId)
+            || history.messages?.map((msg: any) => this.pendingNameLookups.get(msg.key?.id)).find(Boolean);
+          const historyName = sample?.name || sample?.displayName
+            || history.contacts?.find((contact: any) => contact?.name || contact?.notify)?.name
+            || history.contacts?.find((contact: any) => contact?.notify)?.notify
+            || history.messages?.find((msg: any) => !msg.key?.fromMe && msg.pushName)?.pushName;
+          if (requestedPhone && historyName) {
+            this.registerContactName(requestedPhone, historyName, cleanPhone);
+          }
+          if (history.chats && history.chats.length > 0) {
+            for (const chat of history.chats) this.rememberChat(cleanPhone, chat);
+          }
           if (history.contacts && history.contacts.length > 0) {
-            for (const c of history.contacts) {
-              const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
-              this.registerContactName(c.id || c.jid || c.phone, name);
-            }
+            for (const c of history.contacts) this.rememberContact(cleanPhone, c);
           }
           if (history.messages && history.messages.length > 0) {
             for (const msg of history.messages) {
-              if (msg.pushName) {
-                this.registerContactName(msg.key?.remoteJid, msg.pushName);
+              if (!msg.key?.fromMe && msg.pushName) {
+                const phone = this.resolvePhone(cleanPhone, msg.key?.remoteJid)
+                  || this.phoneFromJid(msg.key?.senderPn || '')
+                  || this.phoneFromJid(msg.key?.participantPn || '')
+                  || this.pendingNameLookups.get(msg.key?.id)
+                  || requestedPhone;
+                if (phone) this.registerContactName(phone, msg.pushName, cleanPhone);
               }
-              await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
+              await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg, sock);
             }
           }
-        });
+          const ready = await this.contactNameModel.count({ where: { accountPhone: cleanPhone } });
+          console.log(`👤 Contact names stored for ${cleanPhone}: ${ready}`);
+        };
 
-        (sock.ev as any).on('messaging-history.sync', async (history: any) => {
-          console.log(`📜 History Sync (sync) received for ${cleanPhone}: ${history.messages?.length || 0} messages, ${history.contacts?.length || 0} contacts`);
-          if (history.contacts && history.contacts.length > 0) {
-            for (const c of history.contacts) {
-              const name = c.name || c.notify || c.verifiedName || c.short || c.pushname || c.pushName;
-              this.registerContactName(c.id || c.jid || c.phone, name);
-            }
-          }
-          if (history.messages && history.messages.length > 0) {
-            for (const msg of history.messages) {
-              if (msg.pushName) {
-                this.registerContactName(msg.key?.remoteJid, msg.pushName);
-              }
-              await this.incomingMessageHandler.saveHistoryMessage(cleanPhone, msg);
-            }
-          }
-        });
+        (sock.ev as any).on('messaging-history.set', (history: any) => saveHistory(history, 'set'));
+        (sock.ev as any).on('messaging-history.sync', (history: any) => saveHistory(history, 'sync'));
 
         return sock;
       } catch (err) {

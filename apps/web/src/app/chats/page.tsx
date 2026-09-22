@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
@@ -54,6 +55,8 @@ export default function BaileysChatsPage() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
+  const [connectedPhones, setConnectedPhones] = useState<string[]>([]);
 
   // Attachment State
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -68,15 +71,48 @@ export default function BaileysChatsPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchChats();
+    const loadConnection = async () => {
+      try {
+        const res = await api.get('/whatsapp/user-sessions');
+        const sessions = Array.isArray(res.data?.result) ? res.data.result : [];
+        const phones = sessions
+          .map((session: { phone?: string }) => String(session.phone || '').replace(/\D/g, ''))
+          .filter(Boolean);
+        setConnectedPhones(phones);
+        setConnectedPhone((current) => {
+          if (current && phones.includes(current)) return current;
+          const primary = sessions.find((session: { isPrimary?: boolean; phone?: string }) => session.isPrimary);
+          const next = String(primary?.phone || phones[0] || '').replace(/\D/g, '');
+          return next || null;
+        });
+      } catch (err) {
+        setConnectedPhones([]);
+        setConnectedPhone(null);
+      }
+    };
+
+    loadConnection();
+    const interval = setInterval(loadConnection, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!connectedPhone) {
+      setChats([]);
+      setLoadingChats(false);
+      return;
+    }
+
+    setLoadingChats(true);
+    fetchChats(connectedPhone);
     const interval = setInterval(() => {
-      fetchChats();
+      fetchChats(connectedPhone);
       if (selectedContact) {
-        fetchChatMessages(selectedContact, false);
+        fetchChatMessages(selectedContact, connectedPhone, false);
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [selectedContact]);
+  }, [connectedPhone, selectedContact]);
 
   useEffect(() => {
     scrollToBottom();
@@ -155,10 +191,11 @@ export default function BaileysChatsPage() {
     return `${apiBase}${url.startsWith('/') ? '' : '/'}${url}`;
   };
 
-  const fetchChats = async () => {
+  const fetchChats = async (accountPhone: string) => {
     try {
-      const res = await api.get('/whatsapp/chats');
-      const chatList = res.data?.result || [];
+      const res = await api.get('/whatsapp/chats', { params: { phone: accountPhone } });
+      const payload = res.data?.result;
+      const chatList = Array.isArray(payload) ? payload : payload?.chats || [];
       if (Array.isArray(chatList)) {
         setChats(chatList);
         if (!selectedContact && chatList.length > 0 && typeof window !== 'undefined' && window.innerWidth >= 768) {
@@ -172,12 +209,13 @@ export default function BaileysChatsPage() {
     }
   };
 
-  const fetchChatMessages = async (chatNumber: string, showLoading = true) => {
-    if (!chatNumber) return;
+  const fetchChatMessages = async (chatNumber: string, accountPhone: string, showLoading = true) => {
+    if (!chatNumber || !accountPhone) return;
     if (showLoading) setLoadingMessages(true);
     try {
-      const res = await api.get(`/whatsapp/chats/${chatNumber}`);
-      const msgList = res.data?.result || [];
+      const res = await api.get(`/whatsapp/chats/${chatNumber}`, { params: { phone: accountPhone } });
+      const payload = res.data?.result;
+      const msgList = Array.isArray(payload) ? payload : payload?.messages || [];
       if (Array.isArray(msgList)) {
         setMessages(msgList);
       }
@@ -192,7 +230,7 @@ export default function BaileysChatsPage() {
     setSelectedContact(phone);
     setSelectedContactName(name && name !== `+${phone}` ? name : null);
     setSelectedContactPic(picUrl || null);
-    fetchChatMessages(phone, true);
+    if (connectedPhone) fetchChatMessages(phone, connectedPhone, true);
     if (!picUrl) {
       fetchProfilePic(phone);
     }
@@ -200,7 +238,9 @@ export default function BaileysChatsPage() {
 
   const fetchProfilePic = async (phone: string) => {
     try {
-      const res = await api.get(`/whatsapp/contact-profile?phone=${phone}`);
+      const res = await api.get('/whatsapp/contact-profile', {
+        params: { phone, account: connectedPhone || undefined },
+      });
       if (res.data?.result?.profilePicUrl) {
         setSelectedContactPic(res.data.result.profilePicUrl);
       }
@@ -254,14 +294,17 @@ export default function BaileysChatsPage() {
       const res = await api.post('/whatsapp/send-message', {
         phone: selectedContact,
         message: msgToSend,
+        from: connectedPhone,
         mediaUrl: uploadedMediaUrl,
         mediaType: mediaFile ? mediaType : null
       });
 
       if (res.data?.status) {
         removeMedia();
-        fetchChatMessages(selectedContact, false);
-        fetchChats();
+        if (connectedPhone) {
+          fetchChatMessages(selectedContact, connectedPhone, false);
+          fetchChats(connectedPhone);
+        }
       } else {
         toast.error(res.data?.message || 'Failed to send message');
       }
@@ -329,7 +372,14 @@ export default function BaileysChatsPage() {
             <div className="w-10 h-10 rounded-full bg-[#00a884] text-white flex items-center justify-center font-bold text-sm shadow-sm">
               <span className="font-mono text-xs font-black">WA</span>
             </div>
-            <span className="font-bold text-[#111b21] text-base">Chats</span>
+            <div className="min-w-0">
+              <span className="font-bold text-[#111b21] text-base block leading-tight">Chats</span>
+              {connectedPhone ? (
+                <span className="text-[11px] text-[#667781] font-mono block truncate">+{connectedPhone}</span>
+              ) : (
+                <span className="text-[11px] text-[#667781] block">No WhatsApp connected</span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center space-x-2">
@@ -341,7 +391,7 @@ export default function BaileysChatsPage() {
               <Plus size={20} />
             </button>
             <button
-              onClick={fetchChats}
+              onClick={() => connectedPhone && fetchChats(connectedPhone)}
               className="p-2 text-[#54656f] hover:bg-[#e9edef] rounded-full transition-colors"
               title="Refresh Chats"
             >
@@ -351,6 +401,24 @@ export default function BaileysChatsPage() {
         </div>
 
         {/* SEARCH BAR CONTAINER */}
+        {connectedPhones.length > 1 && (
+          <div className="px-3 py-2 bg-white border-b border-[#f0f2f5]">
+            <select
+              value={connectedPhone || ''}
+              onChange={(e) => {
+                setConnectedPhone(e.target.value);
+                setSelectedContact(null);
+                setMessages([]);
+              }}
+              className="w-full px-3 py-1.5 bg-[#f0f2f5] rounded-lg text-xs text-[#111b21] focus:outline-none"
+            >
+              {connectedPhones.map((phone) => (
+                <option key={phone} value={phone}>+{phone}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="p-2.5 bg-white border-b border-[#f0f2f5]">
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-2.5 text-[#54656f]" />
@@ -366,9 +434,17 @@ export default function BaileysChatsPage() {
 
         {/* CHATS SCROLLABLE LIST */}
         <div className="flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
-          {filteredChats.length === 0 ? (
+          {!connectedPhone ? (
             <div className="p-8 text-center text-[#54656f] text-xs">
-              <p className="font-semibold text-gray-700">No chats found</p>
+              <p className="font-semibold text-gray-700">Connect a WhatsApp number</p>
+              <p className="mt-1">Chats appear here only for the WhatsApp account that is connected.</p>
+              <Link href="/connections" className="mt-3 inline-block text-[#00a884] font-bold hover:underline">
+                Open Connections
+              </Link>
+            </div>
+          ) : filteredChats.length === 0 ? (
+            <div className="p-8 text-center text-[#54656f] text-xs">
+              <p className="font-semibold text-gray-700">No chats on +{connectedPhone}</p>
               <button
                 onClick={() => setShowNewChatModal(true)}
                 className="mt-3 text-[#00a884] font-bold hover:underline"
@@ -471,7 +547,7 @@ export default function BaileysChatsPage() {
               <div className="flex items-center space-x-1 shrink-0">
                 <button
                   onClick={() => {
-                    fetchChatMessages(selectedContact, true);
+                    if (connectedPhone) fetchChatMessages(selectedContact, connectedPhone, true);
                     fetchProfilePic(selectedContact);
                   }}
                   className="p-2 text-[#54656f] hover:bg-[#e9edef] rounded-full transition-colors"
@@ -506,7 +582,9 @@ export default function BaileysChatsPage() {
 
                     {/* MESSAGES IN DATE GROUP */}
                     {group.msgs.map((m) => {
-                      const isMe = m.status === 'sent' || (m.sender !== selectedContact && m.status !== 'received');
+                      const isMe = connectedPhone
+                        ? String(m.sender || '').replace(/\D/g, '') === connectedPhone
+                        : m.status === 'sent';
                       return (
                         <div
                           key={m.id}
@@ -521,9 +599,9 @@ export default function BaileysChatsPage() {
                             }`}
                           >
                             {/* Sender Push Name for Received Messages */}
-                            {!isMe && m.senderName && (
+                            {!isMe && (m.senderName || selectedContactName) && (
                               <p className="text-[11px] font-bold text-[#00a884] mb-0.5">
-                                {m.senderName}
+                                {m.senderName || selectedContactName}
                               </p>
                             )}
 
@@ -532,6 +610,10 @@ export default function BaileysChatsPage() {
                               <div className="rounded-lg overflow-hidden mb-1 border border-black/10">
                                 {m.mediaType === 'image' || m.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
                                   <img src={resolveMediaUrl(m.mediaUrl)} alt="Attachment" className="max-h-60 w-full object-cover" />
+                                ) : m.mediaType === 'video' || m.mediaUrl.match(/\.(mp4|webm|mov)/i) ? (
+                                  <video src={resolveMediaUrl(m.mediaUrl)} controls className="max-h-60 w-full" />
+                                ) : m.mediaType === 'audio' || m.mediaUrl.match(/\.(ogg|mp3|m4a|wav|opus)/i) ? (
+                                  <audio src={resolveMediaUrl(m.mediaUrl)} controls className="w-full" />
                                 ) : (
                                   <a
                                     href={resolveMediaUrl(m.mediaUrl)}
@@ -630,7 +712,9 @@ export default function BaileysChatsPage() {
             </div>
             <h4 className="font-bold text-[#111b21] text-base">WhatsApp Web for MsgPilot</h4>
             <p className="text-xs text-[#667781] mt-1 max-w-xs">
-              Send and receive messages seamlessly with full chat history.
+              {connectedPhone
+                ? `Messages for +${connectedPhone}, the WhatsApp number connected on this account.`
+                : 'Connect a WhatsApp number to see its chats here.'}
             </p>
           </div>
         )}

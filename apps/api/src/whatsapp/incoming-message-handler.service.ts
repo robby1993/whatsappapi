@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import axios from 'axios';
+import { downloadMediaMessage, extensionForMediaMessage } from '@whiskeysockets/baileys';
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
+import pino from 'pino';
 import { ChatFlow } from '../database/models/ChatFlow';
 import { ChatSession } from '../database/models/ChatSession';
 import { User } from '../database/models/User';
@@ -12,6 +16,8 @@ import { WhatsappUtils } from './whatsapp-utils';
 @Injectable()
 export class IncomingMessageHandler {
   private readonly SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 Minutes
+  private readonly mediaLogger = pino({ level: 'silent' });
+  private mediaChain: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectModel(ChatFlow)
@@ -29,48 +35,9 @@ export class IncomingMessageHandler {
   /**
    * Saves historical messages during Baileys full history sync.
    */
-  async saveHistoryMessage(botPhone: string, msg: any) {
+  async saveHistoryMessage(botPhone: string, msg: any, sock?: any) {
     try {
-      if (!msg || !msg.message) return;
-      let msgContent = this.unwrapMessage(msg.message);
-      if (!msgContent) return;
-
-      const text = this.extractText(msgContent);
-      if (!text || text.toLowerCase().includes('waiting for this message')) return;
-
-      const senderJid = msg.key?.remoteJid || '';
-      const isFromMe = msg.key?.fromMe;
-
-      const cleanRemote = (senderJid || '').replace(/@.*$/, '').replace(/\D/g, '');
-      const cleanBotPhone = (botPhone || '').replace(/\D/g, '');
-
-      if (!cleanRemote || cleanRemote.length < 10 || cleanRemote.length > 13 || cleanRemote.startsWith('1203')) return;
-
-      const sender = isFromMe ? cleanBotPhone : cleanRemote;
-      const receiver = isFromMe ? cleanRemote : cleanBotPhone;
-      const status = isFromMe ? 'sent' : 'received';
-      const msgId = msg.key?.id || `hist_${Date.now()}_${Math.random()}`;
-      const pushName = msg.pushName || null;
-
-      if (pushName) {
-        this.messageLogModel.update(
-          { senderName: pushName },
-          { where: { sender: cleanRemote, senderName: null } }
-        ).catch(() => {});
-      }
-
-      const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
-      if (!existing) {
-        await this.messageLogModel.create({
-          sender,
-          senderName: pushName,
-          receiver,
-          message: text,
-          status,
-          messageId: msgId,
-          timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
-        });
-      }
+      await this.persistChatMessage(botPhone, msg, sock, false);
     } catch (e) {
       // Ignore single history message save error
     }
@@ -94,42 +61,9 @@ export class IncomingMessageHandler {
         const senderJid = msg.key?.remoteJid || '';
         const text = this.extractText(msgContent);
         const isFromMe = msg.key?.fromMe;
+        const saved = await this.persistChatMessage(botPhone, msg, sock, true);
 
-        if (!text || text.toLowerCase().includes('waiting for this message')) continue;
-
-        const cleanRemote = (senderJid || '').replace(/@.*$/, '').replace(/\D/g, '');
-        const cleanBotPhone = (botPhone || '').replace(/\D/g, '');
-
-        if (cleanRemote && cleanRemote.length >= 10 && cleanRemote.length <= 13 && !cleanRemote.startsWith('1203')) {
-          const sender = isFromMe ? cleanBotPhone : cleanRemote;
-          const receiver = isFromMe ? cleanRemote : cleanBotPhone;
-          const status = isFromMe ? 'sent' : 'received';
-          const msgId = msg.key?.id || `msg_${Date.now()}`;
-          const pushName = msg.pushName || null;
-
-          if (pushName) {
-            this.messageLogModel.update(
-              { senderName: pushName },
-              { where: { sender: cleanRemote, senderName: null } }
-            ).catch(() => {});
-          }
-
-          const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
-          if (!existing) {
-            await this.messageLogModel.create({
-              sender,
-              senderName: pushName,
-              receiver,
-              message: text,
-              status,
-              messageId: msgId,
-              timestamp: Number(msg.messageTimestamp || Math.floor(Date.now() / 1000)),
-            });
-            console.log(`💾 Saved message (${status}): ${sender} (${pushName || 'Unknown'}) → ${receiver} ("${text.slice(0, 30)}")`);
-          }
-        }
-
-        if (isFromMe) continue;
+        if (isFromMe || !saved?.text) continue;
 
         // 0. Handle Global Commands (Exit/Restart)
         if (this.isGlobalCommand(text)) {
@@ -184,6 +118,104 @@ export class IncomingMessageHandler {
     } catch (err) {
       console.error('❌ Incoming Message Error:', err.message);
     }
+  }
+
+  private cleanChatPhone(jid: string): string {
+    const value = String(jid || '');
+    if (!value || value.includes('@g.us') || value.includes('@broadcast') || value.endsWith('@lid')) return '';
+    const digits = value.replace(/@.*$/, '').replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15 || digits.startsWith('1203')) return '';
+    return digits;
+  }
+
+  private describeMedia(msgContent: any): { type: string } | null {
+    if (!msgContent) return null;
+    if (msgContent.imageMessage || msgContent.stickerMessage) return { type: 'image' };
+    if (msgContent.videoMessage) return { type: 'video' };
+    if (msgContent.audioMessage) return { type: 'audio' };
+    if (msgContent.documentMessage) return { type: 'document' };
+    return null;
+  }
+
+  private async persistChatMessage(botPhone: string, msg: any, sock: any, awaitDownload: boolean) {
+    if (!msg?.message) return null;
+    const msgContent = this.unwrapMessage(msg.message);
+    if (!msgContent) return null;
+
+    const text = this.extractText(msgContent);
+    if (text.toLowerCase().includes('waiting for this message')) return null;
+    const media = this.describeMedia(msgContent);
+    if (!text && !media) return null;
+
+    const cleanRemote = this.cleanChatPhone(msg.key?.remoteJid || '');
+    const cleanBotPhone = String(botPhone || '').replace(/\D/g, '');
+    if (!cleanRemote || !cleanBotPhone) return null;
+
+    const isFromMe = !!msg.key?.fromMe;
+    const sender = isFromMe ? cleanBotPhone : cleanRemote;
+    const receiver = isFromMe ? cleanRemote : cleanBotPhone;
+    const pushName = !isFromMe && msg.pushName && !String(msg.pushName).startsWith('+')
+      ? String(msg.pushName).trim()
+      : null;
+    const msgId = msg.key?.id || `msg_${Date.now()}_${Math.random()}`;
+    const timestamp = Number(msg.messageTimestamp || Math.floor(Date.now() / 1000));
+
+    const existing = await this.messageLogModel.findOne({ where: { messageId: msgId } });
+    const row = existing || await this.messageLogModel.create({
+      sender,
+      senderName: pushName,
+      receiver,
+      message: text,
+      mediaType: media?.type || null,
+      status: isFromMe ? 'sent' : 'received',
+      messageId: msgId,
+      timestamp,
+    });
+
+    if (existing) {
+      const updates: any = {};
+      if (pushName && !existing.senderName) updates.senderName = pushName;
+      if (media?.type && !existing.mediaType) updates.mediaType = media.type;
+      if (!existing.message && text) updates.message = text;
+      if (Object.keys(updates).length) await existing.update(updates);
+    }
+
+    const ageSeconds = timestamp > 100000000000 ? timestamp / 1000 : timestamp;
+    const recent = !ageSeconds || ageSeconds > Date.now() / 1000 - 21 * 24 * 3600;
+    if (media && sock && !row.mediaUrl && (awaitDownload || recent)) {
+      const task = () => this.downloadMessageMedia(sock, msg, msgContent, msgId);
+      if (awaitDownload) await task().catch(() => undefined);
+      else this.mediaChain = this.mediaChain.then(task).catch(() => undefined);
+    }
+
+    return { text };
+  }
+
+  private async downloadMessageMedia(sock: any, msg: any, msgContent: any, msgId: string) {
+    const buffer = await downloadMediaMessage(
+      msg,
+      'buffer',
+      {},
+      {
+        logger: this.mediaLogger,
+        reuploadRequest: (message: any) => sock.updateMediaMessage(message),
+      },
+    );
+    let ext = '.bin';
+    try {
+      const rawExt = extensionForMediaMessage(msgContent) || '.bin';
+      ext = rawExt.startsWith('.') ? rawExt.split(';')[0] : `.${String(rawExt).split(';')[0]}`;
+    } catch (e) {}
+    const filename = `${String(msgId).replace(/[^\w.-]/g, '')}${ext}`;
+    const dir = join(process.cwd(), 'uploads');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, filename), buffer);
+    const apiUrl = process.env.API_URL || 'http://localhost:5001';
+    const kind = this.describeMedia(msgContent);
+    await this.messageLogModel.update(
+      { mediaUrl: `${apiUrl}/uploads/${filename}`, mediaType: kind?.type || 'document' },
+      { where: { messageId: msgId } },
+    );
   }
 
   private async processSession(sock: any, session: ChatSession, userInput: string) {

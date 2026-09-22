@@ -9,6 +9,7 @@ import { Stat } from '../database/models/Stat';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { Session } from '../database/models/Session';
 import { User } from '../database/models/User';
+import { ContactName } from '../database/models/ContactName';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -30,7 +31,17 @@ export class WhatsappController {
     private sessionModel: typeof Session,
     @InjectModel(User)
     private userModel: typeof User,
+    @InjectModel(ContactName)
+    private contactNameModel: typeof ContactName,
   ) {}
+
+  private mediaPreview(type?: string) {
+    if (type === 'image') return '📷 Photo';
+    if (type === 'video') return '🎥 Video';
+    if (type === 'audio') return '🎤 Voice message';
+    if (type === 'document') return '📄 Document';
+    return 'Message';
+  }
 
   private async listOwnedPhones(userPhone: string): Promise<Set<string>> {
     const phones = new Set<string>();
@@ -57,6 +68,35 @@ export class WhatsappController {
     }
 
     return phones;
+  }
+
+  private async listConnectedPhones(userPhone: string): Promise<string[]> {
+    const owned = await this.listOwnedPhones(userPhone);
+    const connected: string[] = [];
+
+    for (const phone of owned) {
+      const status = this.whatsappService.getStatus(phone);
+      if (status?.status !== 'connected') continue;
+
+      const owner = String(status.ownerUserNumber || '').replace(/\D/g, '');
+      if (owner && owner !== userPhone) continue;
+
+      connected.push(phone);
+    }
+
+    return connected;
+  }
+
+  private async resolveConnectedPhone(userPhone: string, requested?: string): Promise<string | null> {
+    const connected = await this.listConnectedPhones(userPhone);
+    const cleanRequested = (requested || '').replace(/\D/g, '');
+    if (cleanRequested && connected.includes(cleanRequested)) return cleanRequested;
+
+    const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
+    const primary = (currentUser?.primaryPhone || '').replace(/\D/g, '');
+    if (primary && connected.includes(primary)) return primary;
+
+    return connected[0] || null;
   }
 
   private async isOwnedByAnotherUser(userPhone: string, targetPhone: string): Promise<boolean> {
@@ -383,38 +423,42 @@ export class WhatsappController {
   }
 
   @Get('chats')
-  async getChats(@Req() req: any) {
+  async getChats(@Query('phone') phone: string, @Req() req: any) {
     try {
       const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+      const connectedPhones = await this.listConnectedPhones(userPhone);
+      const activePhone = await this.resolveConnectedPhone(userPhone, phone);
 
-      const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
-      const ownedPhones = await this.listOwnedPhones(userPhone);
-      const storedPrimary = (currentUser?.primaryPhone || '').replace(/\D/g, '');
-      const primaryPhone = ownedPhones.has(storedPrimary) ? storedPrimary : userPhone;
-      const userPhones = Array.from(ownedPhones);
+      if (!activePhone) {
+        return {
+          status: true,
+          message: 'No WhatsApp connection',
+          result: { chats: [], connectedPhone: null, connectedPhones },
+        };
+      }
+
+      const userPhones = [activePhone];
 
       const whereCondition = {
         [Op.or]: [
-          { sender: { [Op.in]: userPhones } },
-          { receiver: { [Op.in]: userPhones } }
+          { sender: activePhone },
+          { receiver: activePhone },
         ]
       };
 
       const logs = await this.messageLogModel.findAll({
         where: whereCondition,
         order: [['createdAt', 'DESC']],
-        limit: 500,
+        limit: 2000,
       });
 
       const chatsMap = new Map<string, any>();
 
-      // Active connected socket for profile picture & contact lookup
-      const activeSock = this.whatsappService.sessions.get(primaryPhone)
-        || userPhones.map((phone) => this.whatsappService.sessions.get(phone)).find(Boolean);
+      const activeSock = this.whatsappService.sessions.get(activePhone);
 
       for (const log of logs) {
-        const isSenderUser = userPhones.includes(log.sender);
-        const isReceiverUser = userPhones.includes(log.receiver);
+        const isSenderUser = log.sender === activePhone;
+        const isReceiverUser = log.receiver === activePhone;
 
         let cleanOther = '';
         const pushName = log.senderName && !log.senderName.startsWith('+') ? log.senderName : null;
@@ -434,10 +478,11 @@ export class WhatsappController {
           chatsMap.set(cleanOther, {
             phone: cleanOther,
             name: pushName || `+${cleanOther}`,
-            lastMessage: log.message || (log.mediaUrl ? '📷 Photo' : 'Message'),
+            lastMessage: log.message || this.mediaPreview(log.mediaType),
             timestamp: log.createdAt || log.timestamp,
             status: log.status,
             profilePicUrl: null,
+            accountPhone: activePhone,
           });
         } else if (pushName) {
           const existing = chatsMap.get(cleanOther);
@@ -447,24 +492,40 @@ export class WhatsappController {
         }
       }
 
-      const chatArray = Array.from(chatsMap.values());
+      const chatArray = Array.from(chatsMap.values()).sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      );
 
-      // Query live contactsMap from Baileys socket store & database for any contact push name
+      const chatPhones = chatArray.map((c) => c.phone);
+      const savedNames = chatPhones.length
+        ? await this.contactNameModel.findAll({
+            where: { accountPhone: activePhone, phone: { [Op.in]: chatPhones } },
+            attributes: ['phone', 'name'],
+          })
+        : [];
+      const nameByPhone = new Map(savedNames.map((row) => [row.phone, row.name]));
+
+      if (chatPhones.length) {
+        const namedMessages = await this.messageLogModel.findAll({
+          where: {
+            sender: { [Op.in]: chatPhones },
+            receiver: activePhone,
+            senderName: { [Op.ne]: null },
+          },
+          attributes: ['sender', 'senderName'],
+          order: [['createdAt', 'DESC']],
+        });
+        for (const row of namedMessages) {
+          if (row.senderName && !row.senderName.startsWith('+') && !nameByPhone.has(row.sender)) {
+            nameByPhone.set(row.sender, row.senderName);
+          }
+        }
+      }
+
       for (const c of chatArray) {
-        const liveContactName = this.whatsappService.contactsMap.get(c.phone);
+        const liveContactName = this.whatsappService.contactDisplayName(activePhone, c.phone) || nameByPhone.get(c.phone);
         if (liveContactName) {
           c.name = liveContactName;
-        } else if (!c.name || c.name === `+${c.phone}`) {
-          const contactMsg = await this.messageLogModel.findOne({
-            where: {
-              sender: c.phone,
-              senderName: { [Op.ne]: null }
-            },
-            order: [['createdAt', 'DESC']]
-          });
-          if (contactMsg?.senderName && !contactMsg.senderName.startsWith('+')) {
-            c.name = contactMsg.senderName;
-          }
         }
       }
 
@@ -485,7 +546,11 @@ export class WhatsappController {
         );
       }
 
-      return { status: true, message: 'Chats fetched successfully', result: chatArray };
+      return {
+        status: true,
+        message: 'Chats fetched successfully',
+        result: { chats: chatArray, connectedPhone: activePhone, connectedPhones },
+      };
     } catch (err: any) {
       console.error('❌ Error fetching chats:', err.message);
       return { status: false, message: err.message, result: [] };
@@ -493,29 +558,28 @@ export class WhatsappController {
   }
 
   @Get('chats/:chatNumber')
-  async getChatMessages(@Param('chatNumber') chatNumber: string, @Req() req: any) {
+  async getChatMessages(@Param('chatNumber') chatNumber: string, @Query('phone') phone: string, @Req() req: any) {
     try {
       const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
       const cleanOther = (chatNumber || '').replace(/\D/g, '');
+      const activePhone = await this.resolveConnectedPhone(userPhone, phone);
 
-      if (!cleanOther) {
-        return { status: true, message: 'Invalid chat number', result: [] };
+      if (!cleanOther || !activePhone) {
+        return { status: true, message: 'No WhatsApp connection', result: { messages: [], connectedPhone: activePhone } };
       }
-
-      const userPhones = Array.from(await this.listOwnedPhones(userPhone));
 
       const messages = await this.messageLogModel.findAll({
         where: {
           [Op.or]: [
-            { sender: { [Op.in]: userPhones }, receiver: cleanOther },
-            { sender: cleanOther, receiver: { [Op.in]: userPhones } }
+            { sender: activePhone, receiver: cleanOther },
+            { sender: cleanOther, receiver: activePhone }
           ]
         },
         order: [['createdAt', 'ASC']],
         limit: 300,
       });
 
-      return { status: true, message: 'Chat history fetched', result: messages };
+      return { status: true, message: 'Chat history fetched', result: { messages, connectedPhone: activePhone } };
     } catch (err: any) {
       console.error('❌ Error fetching chat messages:', err.message);
       return { status: false, message: err.message, result: [] };
@@ -523,16 +587,12 @@ export class WhatsappController {
   }
 
   @Get('contact-profile')
-  async getContactProfile(@Query('phone') phone: string, @Req() req: any) {
+  async getContactProfile(@Query('phone') phone: string, @Query('account') account: string, @Req() req: any) {
     try {
       const cleanPhone = (phone || '').replace(/\D/g, '');
       const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
-      const currentUser = await this.userModel.findOne({ where: { number: userPhone } });
-      const sender = currentUser?.primaryPhone || userPhone;
-
-      const owned = await this.listOwnedPhones(userPhone);
-      const ownedSender = owned.has(String(sender).replace(/\D/g, '')) ? String(sender).replace(/\D/g, '') : userPhone;
-      const sock = this.whatsappService.sessions.get(ownedSender);
+      const accountPhone = await this.resolveConnectedPhone(userPhone, account);
+      const sock = accountPhone ? this.whatsappService.sessions.get(accountPhone) : null;
 
       if (!sock) return { status: true, result: { phone: cleanPhone, profilePicUrl: null } };
 
