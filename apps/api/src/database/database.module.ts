@@ -24,6 +24,18 @@ import { RcsAutomation } from './models/RcsAutomation';
 import { RcsFlow } from './models/RcsFlow';
 import { ContactName } from './models/ContactName';
 
+function postgresSsl(dbUrl: string): false | { require: true; rejectUnauthorized: false } {
+  const sslmode = (dbUrl.match(/[?&]sslmode=([^&]+)/i)?.[1] || '').toLowerCase();
+  if (sslmode === 'disable' || process.env.DATABASE_SSL === 'false') return false;
+
+  const requested =
+    process.env.DATABASE_SSL === 'true' ||
+    ['require', 'prefer', 'verify-ca', 'verify-full', 'no-verify', 'true'].includes(sslmode);
+
+  if (!requested) return false;
+  return { require: true, rejectUnauthorized: false };
+}
+
 @Module({
   imports: [
     SequelizeModule.forRootAsync({
@@ -35,7 +47,8 @@ import { ContactName } from './models/ContactName';
           throw new Error('DATABASE_URL environment variable is not defined');
         }
 
-        const isRemote = dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1');
+        const ssl = postgresSsl(dbUrl);
+        console.log(`Postgres SSL: ${ssl ? 'on' : 'off'}`);
 
         return {
           dialect: 'postgres',
@@ -70,14 +83,16 @@ import { ContactName } from './models/ContactName';
             alter: true,
           },
           logging: false,
+          pool: {
+            max: 10,
+            min: 0,
+            acquire: 30000,
+            idle: 10000,
+          },
           dialectOptions: {
-            ssl: isRemote
-              ? {
-                  require: true,
-                  rejectUnauthorized: false,
-                }
-              : false,
+            ssl,
             keepAlive: true,
+            keepAliveInitialDelayMillis: 10000,
           },
         };
       },
