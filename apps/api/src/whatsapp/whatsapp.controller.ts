@@ -19,6 +19,8 @@ import { Op } from 'sequelize';
 @Controller('whatsapp')
 @UseGuards(TokenAuthGuard)
 export class WhatsappController {
+  private readonly sendOnceInFlight = new Set<string>();
+
   constructor(
     private whatsappService: WhatsappService,
     @InjectModel(MessageLog)
@@ -277,7 +279,7 @@ export class WhatsappController {
   }
 
   @Post('send-message')
-  async sendMessage(@Body() body: { phone: string; message: string; from?: string; mediaUrl?: string; mediaType?: string }, @Req() req: any) {
+  async sendMessage(@Body() body: { phone: string; message: string; from?: string; mediaUrl?: string; mediaType?: string; sendOnce?: boolean }, @Req() req: any) {
     if (req.user?.isExpired) {
       return { status: false, message: 'Subscription expired. Please renew your plan on the Subscription page.', result: null };
     }
@@ -304,7 +306,38 @@ export class WhatsappController {
       return { status: false, message: `Primary WhatsApp device (+${sender}) is disconnected. Please connect on Connections page.`, result: null };
     }
 
-    const jid = body.phone.replace(/\D/g, '') + '@s.whatsapp.net';
+    const receiver = body.phone.replace(/\D/g, '');
+    const messageText = (body.message || '').trim();
+    const jid = receiver + '@s.whatsapp.net';
+
+    const sendOnceKey = `${sender}:${receiver}:${messageText}:${body.mediaUrl || ''}`;
+    if (body.sendOnce) {
+      if (this.sendOnceInFlight.has(sendOnceKey)) {
+        return {
+          status: true,
+          message: 'Message was already sent to this number',
+          result: { alreadySent: true },
+        };
+      }
+      const alreadySent = await this.messageLogModel.findOne({
+        where: {
+          sender,
+          receiver,
+          message: messageText,
+          status: 'sent',
+          ...(body.mediaUrl ? { mediaUrl: body.mediaUrl } : {}),
+        },
+        order: [['createdAt', 'DESC']],
+      });
+      if (alreadySent) {
+        return {
+          status: true,
+          message: 'Message was already sent to this number',
+          result: { alreadySent: true, messageId: alreadySent.messageId },
+        };
+      }
+      this.sendOnceInFlight.add(sendOnceKey);
+    }
 
     try {
       const messageOptions = await WhatsappUtils.prepareMessageOptions(body.message, body.mediaUrl, body.mediaType);
@@ -318,8 +351,8 @@ export class WhatsappController {
 
       await this.messageLogModel.create({
         sender,
-        receiver: body.phone,
-        message: body.message || '',
+        receiver,
+        message: messageText,
         status: 'sent',
         mediaUrl: body.mediaUrl,
         mediaType: body.mediaType,
@@ -333,6 +366,8 @@ export class WhatsappController {
     } catch (err) {
       console.error(`❌ Send Message Error:`, err.message);
       return { status: false, message: 'Failed to send message: ' + err.message, result: null };
+    } finally {
+      if (body.sendOnce) this.sendOnceInFlight.delete(sendOnceKey);
     }
   }
 

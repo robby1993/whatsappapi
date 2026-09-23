@@ -16,6 +16,7 @@ export default function SendMessagePage() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState('image');
   const [loading, setLoading] = useState(false);
+  const [sendOnce, setSendOnce] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,11 +91,16 @@ export default function SendMessagePage() {
         phone: fullNumber,
         message: message,
         mediaUrl,
-        mediaType: mediaFile ? mediaType : null
+        mediaType: mediaFile ? mediaType : null,
+        sendOnce,
       });
 
       if (response.data.status) {
-        toast.success('Message sent successfully!');
+        if (response.data.result?.alreadySent) {
+          toast('This message was already sent to this number');
+        } else {
+          toast.success('Message sent successfully!');
+        }
         setPhoneNumber('');
         setMessage('');
         removeMedia();
@@ -219,6 +225,16 @@ export default function SendMessagePage() {
               </div>
             )}
           </div>
+
+          <label className="flex items-center gap-3 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={sendOnce}
+              onChange={(e) => setSendOnce(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span>Send once — skip if this message was already sent to this number</span>
+          </label>
 
           <button
             type="submit"
