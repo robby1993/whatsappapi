@@ -25,30 +25,16 @@ import { RcsFlow } from './models/RcsFlow';
 import { ContactName } from './models/ContactName';
 
 function postgresSsl(dbUrl: string): false | { rejectUnauthorized: false } {
+  if (process.env.DATABASE_SSL === 'false') return false;
+  if (process.env.DATABASE_SSL === 'true') return { rejectUnauthorized: false };
+
   const sslmode = (dbUrl.match(/[?&]sslmode=([^&]+)/i)?.[1] || '').toLowerCase();
-  if (sslmode === 'disable' || process.env.DATABASE_SSL === 'false') return false;
-  if (
-    process.env.DATABASE_SSL === 'true' ||
-    ['require', 'prefer', 'verify-ca', 'verify-full', 'no-verify', 'true'].includes(sslmode)
-  ) {
+  if (['require', 'prefer', 'verify-ca', 'verify-full', 'no-verify', 'true'].includes(sslmode)) {
     return { rejectUnauthorized: false };
   }
 
-  let host = '';
-  try {
-    host = new URL(dbUrl.replace(/^postgresql:/i, 'postgres:')).hostname.toLowerCase();
-  } catch {
-    host = '';
-  }
-
-  // Private Docker / Railway hosts speak plain Postgres. Forcing TLS makes the
-  // socket reset, the process exits, and the proxy returns 502 for every route.
-  if (!host || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.railway.internal') || !host.includes('.')) {
-    return false;
-  }
-
-  const needsTls = ['rlwy.net', 'railway.app', 'neon.tech', 'supabase.co', 'render.com', 'amazonaws.com'];
-  if (needsTls.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+  // Supabase closes a plain connection. TLS stays on even when sslmode was removed from the URL.
+  if (/supabase\.(co|com)/i.test(dbUrl)) {
     return { rejectUnauthorized: false };
   }
 
