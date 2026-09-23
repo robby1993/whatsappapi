@@ -24,16 +24,35 @@ import { RcsAutomation } from './models/RcsAutomation';
 import { RcsFlow } from './models/RcsFlow';
 import { ContactName } from './models/ContactName';
 
-function postgresSsl(dbUrl: string): false | { require: true; rejectUnauthorized: false } {
+function postgresSsl(dbUrl: string): false | { rejectUnauthorized: false } {
   const sslmode = (dbUrl.match(/[?&]sslmode=([^&]+)/i)?.[1] || '').toLowerCase();
   if (sslmode === 'disable' || process.env.DATABASE_SSL === 'false') return false;
-
-  const requested =
+  if (
     process.env.DATABASE_SSL === 'true' ||
-    ['require', 'prefer', 'verify-ca', 'verify-full', 'no-verify', 'true'].includes(sslmode);
+    ['require', 'prefer', 'verify-ca', 'verify-full', 'no-verify', 'true'].includes(sslmode)
+  ) {
+    return { rejectUnauthorized: false };
+  }
 
-  if (!requested) return false;
-  return { require: true, rejectUnauthorized: false };
+  let host = '';
+  try {
+    host = new URL(dbUrl.replace(/^postgresql:/i, 'postgres:')).hostname.toLowerCase();
+  } catch {
+    host = '';
+  }
+
+  // Private Docker / Railway hosts speak plain Postgres. Forcing TLS makes the
+  // socket reset, the process exits, and the proxy returns 502 for every route.
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.railway.internal') || !host.includes('.')) {
+    return false;
+  }
+
+  const needsTls = ['rlwy.net', 'railway.app', 'neon.tech', 'supabase.co', 'render.com', 'amazonaws.com'];
+  if (needsTls.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+    return { rejectUnauthorized: false };
+  }
+
+  return false;
 }
 
 @Module({

@@ -67,5 +67,9 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 MsgPilot Server running on port ${port}`);
 }
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('API failed to start. Login and every other route will return 502 until this process stays up.');
+  console.error(err?.message || err);
+  process.exit(1);
+});
 
