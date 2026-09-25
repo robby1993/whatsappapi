@@ -47,26 +47,24 @@ export class WhatsappController {
 
   private async listOwnedPhones(userPhone: string): Promise<Set<string>> {
     const phones = new Set<string>();
-    if (userPhone) phones.add(userPhone);
+    if (!userPhone) return phones;
 
     const dbSessions = await this.sessionModel.findAll({
-      where: {
-        dataType: 'creds',
-        dataId: 'base',
-        [Op.or]: [{ userNumber: userPhone }, { phone: userPhone }],
-      },
-      attributes: ['phone'],
+      where: { dataType: 'creds', dataId: 'base' },
+      attributes: ['phone', 'userNumber'],
     });
 
     for (const session of dbSessions) {
       const clean = String(session.phone || '').replace(/\D/g, '');
-      if (clean) phones.add(clean);
+      const owner = String(session.userNumber || '').replace(/\D/g, '');
+      if (!clean || owner !== userPhone) continue;
+      phones.add(clean);
     }
 
     for (const [phone, status] of this.whatsappService.sessionStatus.entries()) {
       const clean = String(phone).replace(/\D/g, '');
       const owner = String(status?.ownerUserNumber || '').replace(/\D/g, '');
-      if (clean && (clean === userPhone || owner === userPhone)) phones.add(clean);
+      if (clean && owner === userPhone) phones.add(clean);
     }
 
     return phones;
@@ -81,7 +79,7 @@ export class WhatsappController {
       if (status?.status !== 'connected') continue;
 
       const owner = String(status.ownerUserNumber || '').replace(/\D/g, '');
-      if (owner && owner !== userPhone) continue;
+      if (owner !== userPhone) continue;
 
       connected.push(phone);
     }
@@ -621,6 +619,29 @@ export class WhatsappController {
       console.error('❌ Error fetching chat messages:', err.message);
       return { status: false, message: err.message, result: [] };
     }
+  }
+
+  @Delete('chats/:chatNumber')
+  async deleteChat(@Param('chatNumber') chatNumber: string, @Query('phone') phone: string, @Req() req: any) {
+    const userPhone = (req.userNumber || '').toString().replace(/\D/g, '');
+    const cleanOther = (chatNumber || '').replace(/\D/g, '');
+    const activePhone = await this.resolveConnectedPhone(userPhone, phone);
+
+    if (!cleanOther || !activePhone) {
+      return { status: false, message: 'This chat does not belong to your connected WhatsApp.', result: null };
+    }
+
+    const removed = await this.messageLogModel.destroy({
+      where: {
+        [Op.or]: [
+          { sender: activePhone, receiver: cleanOther },
+          { sender: cleanOther, receiver: activePhone },
+        ],
+      },
+    });
+    await this.contactNameModel.destroy({ where: { accountPhone: activePhone, phone: cleanOther } });
+
+    return { status: true, message: 'Chat cleared', result: { removed, phone: cleanOther } };
   }
 
   @Get('contact-profile')

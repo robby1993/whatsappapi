@@ -45,6 +45,8 @@ export class ChatflowsService {
       data.triggerKeywords = data.triggerKeywords.split(',').map(k => k.trim());
     }
 
+    delete data.userNumber;
+    delete data.id;
     return await flow.update(data);
   }
 

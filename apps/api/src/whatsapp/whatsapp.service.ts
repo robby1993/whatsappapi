@@ -276,7 +276,7 @@ export class WhatsappService implements OnModuleInit {
   public contactDisplayName(accountPhone: string, phone: string) {
     const account = (accountPhone || '').replace(/\D/g, '');
     const clean = (phone || '').replace(/\D/g, '');
-    return this.contactsMap.get(`${account}:${clean}`) || this.contactsMap.get(clean) || null;
+    return this.contactsMap.get(`${account}:${clean}`) || null;
   }
 
   constructor(

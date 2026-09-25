@@ -5,10 +5,11 @@ import axios from 'axios';
 import { User } from '../database/models/User';
 import { Token } from '../database/models/Token';
 import { Plan } from '../database/models/Plan';
-import { Stat } from '../database/models/Stat';
 import { MessageLog } from '../database/models/MessageLog';
 import { ScheduledMessage } from '../database/models/ScheduledMessage';
 import { SubscriptionHistory } from '../database/models/SubscriptionHistory';
+import { Session } from '../database/models/Session';
+import { Op } from 'sequelize';
 
 @Injectable()
 export class UsersService {
@@ -19,14 +20,14 @@ export class UsersService {
     private tokenModel: typeof Token,
     @InjectModel(Plan)
     private planModel: typeof Plan,
-    @InjectModel(Stat)
-    private statModel: typeof Stat,
     @InjectModel(MessageLog)
     private messageLogModel: typeof MessageLog,
     @InjectModel(ScheduledMessage)
     private scheduledMessageModel: typeof ScheduledMessage,
     @InjectModel(SubscriptionHistory)
     private subscriptionHistoryModel: typeof SubscriptionHistory,
+    @InjectModel(Session)
+    private sessionModel: typeof Session,
   ) {}
 
   async seedAdmin() {
@@ -142,20 +143,38 @@ export class UsersService {
     return await this.planModel.findAll({ order: [['price', 'ASC']] });
   }
 
+  private async ownedSenderPhones(userNumber: string): Promise<string[]> {
+    const phones = new Set<string>();
+    if (userNumber) phones.add(userNumber);
+
+    const sessions = await this.sessionModel.findAll({
+      where: { dataType: 'creds', dataId: 'base', userNumber },
+      attributes: ['phone'],
+    });
+    for (const session of sessions) {
+      const phone = String(session.phone || '').replace(/\D/g, '');
+      if (phone) phones.add(phone);
+    }
+    return Array.from(phones);
+  }
+
   async getDashboardData(userNumber: string, userType: string) {
     const user = await this.userModel.findOne({ where: { number: userNumber, userType } });
-    const stat = await this.statModel.findOne({ where: { id: 1 } });
+    const senders = await this.ownedSenderPhones(userNumber);
+    const senderWhere = { sender: { [Op.in]: senders } };
 
-    const userSentCount = await this.messageLogModel.count({ where: { sender: userNumber } });
+    const userSentCount = await this.messageLogModel.count({
+      where: { ...senderWhere, status: 'sent' },
+    });
     const pendingScheduled = await this.scheduledMessageModel.count({
-      where: { sender: userNumber, status: 'pending' }
+      where: { ...senderWhere, status: 'pending' }
     });
     const totalScheduled = await this.scheduledMessageModel.count({
-      where: { sender: userNumber }
+      where: senderWhere
     });
 
     const recentLogs = await this.messageLogModel.findAll({
-      where: { sender: userNumber },
+      where: senderWhere,
       order: [['timestamp', 'DESC']],
       limit: 5,
     });
@@ -188,7 +207,7 @@ export class UsersService {
     const plans = await this.planModel.findAll({ order: [['price', 'ASC']] });
 
     return {
-      totalSent: userSentCount || (stat ? stat.totalMessagesSent : 0),
+      totalSent: userSentCount,
       pendingScheduled,
       totalScheduled,
       isExpired,
@@ -201,7 +220,10 @@ export class UsersService {
   }
 
   async updateProfile(userNumber: string, userType: string, data: any) {
-    await this.userModel.update(data, { where: { number: userNumber, userType } });
+    const allowed: Record<string, string> = {};
+    if (typeof data?.name === 'string') allowed.name = data.name.trim();
+    if (typeof data?.gender === 'string') allowed.gender = data.gender.trim();
+    await this.userModel.update(allowed, { where: { number: userNumber, userType } });
     const user = await this.userModel.findOne({ where: { number: userNumber, userType } });
     const result = user.toJSON();
     delete result.password;

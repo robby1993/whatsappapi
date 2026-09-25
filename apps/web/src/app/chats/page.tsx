@@ -18,9 +18,16 @@ import {
   Image as ImageIcon,
   FileText,
   ArrowLeft,
-  Calendar,
-  Lock,
-  Download
+  Smile,
+  Video,
+  Mic,
+  ChevronDown,
+  Pin,
+  Archive,
+  BellOff,
+  Mail,
+  Trash2,
+  Eraser,
 } from 'lucide-react';
 
 interface ChatContact {
@@ -67,8 +74,20 @@ export default function BaileysChatsPage() {
   // New Chat Modal
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [newChatNumber, setNewChatNumber] = useState('');
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showAttach, setShowAttach] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [menuPhone, setMenuPhone] = useState<string | null>(null);
+  const [headerMenu, setHeaderMenu] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [chatPrefs, setChatPrefs] = useState<Record<string, { pinned?: boolean; archived?: boolean; muted?: boolean; unread?: boolean }>>({});
+  const [confirmAction, setConfirmAction] = useState<{ phone: string; name: string; mode: 'clear' | 'delete' } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+
+  const emojis = ['😀','😁','😂','🤣','😊','😍','😘','😎','😭','😡','👍','👎','🙏','👏','🔥','❤️','💚','✅','🎉','📷'];
 
   useEffect(() => {
     const loadConnection = async () => {
@@ -98,7 +117,35 @@ export default function BaileysChatsPage() {
 
   useEffect(() => {
     if (!connectedPhone) {
+      setChatPrefs({});
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(`wa-chat-prefs:${connectedPhone}`);
+      setChatPrefs(saved ? JSON.parse(saved) : {});
+    } catch {
+      setChatPrefs({});
+    }
+    setShowArchived(false);
+  }, [connectedPhone]);
+
+  const savePrefs = (next: typeof chatPrefs) => {
+    setChatPrefs(next);
+    if (connectedPhone) localStorage.setItem(`wa-chat-prefs:${connectedPhone}`, JSON.stringify(next));
+  };
+
+  const togglePref = (phone: string, key: 'pinned' | 'archived' | 'muted' | 'unread') => {
+    const current = chatPrefs[phone] || {};
+    savePrefs({ ...chatPrefs, [phone]: { ...current, [key]: !current[key] } });
+    setMenuPhone(null);
+    setHeaderMenu(false);
+  };
+
+  useEffect(() => {
+    if (!connectedPhone) {
       setChats([]);
+      setMessages([]);
+      setSelectedContact(null);
       setLoadingChats(false);
       return;
     }
@@ -115,11 +162,15 @@ export default function BaileysChatsPage() {
   }, [connectedPhone, selectedContact]);
 
   useEffect(() => {
-    scrollToBottom();
+    if (stickToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const onThreadScroll = () => {
+    const el = threadRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
   // Smart Date Formatter for Chat List (Today -> 10:45 AM, Yesterday -> Yesterday, Older -> 15/09/2026)
@@ -196,11 +247,10 @@ export default function BaileysChatsPage() {
       const res = await api.get('/whatsapp/chats', { params: { phone: accountPhone } });
       const payload = res.data?.result;
       const chatList = Array.isArray(payload) ? payload : payload?.chats || [];
+      const returnedPhone = String(payload?.connectedPhone || accountPhone).replace(/\D/g, '');
+      if (returnedPhone !== accountPhone.replace(/\D/g, '')) return;
       if (Array.isArray(chatList)) {
-        setChats(chatList);
-        if (!selectedContact && chatList.length > 0 && typeof window !== 'undefined' && window.innerWidth >= 768) {
-          handleSelectContact(chatList[0].phone, chatList[0].name, chatList[0].profilePicUrl);
-        }
+        setChats(chatList.filter((chat) => !chat.accountPhone || String(chat.accountPhone).replace(/\D/g, '') === returnedPhone));
       }
     } catch (err) {
       console.error('Error loading chats');
@@ -216,8 +266,17 @@ export default function BaileysChatsPage() {
       const res = await api.get(`/whatsapp/chats/${chatNumber}`, { params: { phone: accountPhone } });
       const payload = res.data?.result;
       const msgList = Array.isArray(payload) ? payload : payload?.messages || [];
+      const account = accountPhone.replace(/\D/g, '');
+      const contact = chatNumber.replace(/\D/g, '');
       if (Array.isArray(msgList)) {
-        setMessages(msgList);
+        setMessages(msgList.filter((message) => {
+          const sender = String(message.sender || '').replace(/\D/g, '');
+          const receiver = String(message.receiver || '').replace(/\D/g, '');
+          const betweenAccountAndContact =
+            (sender === account && receiver === contact) ||
+            (sender === contact && receiver === account);
+          return betweenAccountAndContact;
+        }));
       }
     } catch (err) {
       console.error('Error loading chat messages');
@@ -226,7 +285,32 @@ export default function BaileysChatsPage() {
     }
   };
 
+  const linkify = (text: string) => {
+    const parts = text.split(/(https?:\/\/[^\s]+)/g);
+    return parts.map((part, index) =>
+      /^https?:\/\//.test(part) ? (
+        <a key={index} href={part} target="_blank" rel="noreferrer" className="text-[#027eb5] underline break-all">
+          {part}
+        </a>
+      ) : (
+        <span key={index}>{part}</span>
+      )
+    );
+  };
+
+  const openFilePicker = (accept: string) => {
+    if (!chatFileInputRef.current) return;
+    chatFileInputRef.current.accept = accept;
+    setShowAttach(false);
+    chatFileInputRef.current.click();
+  };
+
   const handleSelectContact = (phone: string, name?: string | null, picUrl?: string | null) => {
+    stickToBottomRef.current = true;
+    setShowEmoji(false);
+    setMenuPhone(null);
+    setHeaderMenu(false);
+    if (chatPrefs[phone]?.unread) togglePref(phone, 'unread');
     setSelectedContact(phone);
     setSelectedContactName(name && name !== `+${phone}` ? name : null);
     setSelectedContactPic(picUrl || null);
@@ -328,11 +412,48 @@ export default function BaileysChatsPage() {
     setNewChatNumber('');
   };
 
-  const filteredChats = chats.filter((c) =>
-    c.phone.toLowerCase().includes(search.toLowerCase()) ||
-    (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
-    c.lastMessage.toLowerCase().includes(search.toLowerCase())
-  );
+  const archivedCount = chats.filter((c) => chatPrefs[c.phone]?.archived).length;
+
+  const filteredChats = chats
+    .filter((c) => {
+      const archived = !!chatPrefs[c.phone]?.archived;
+      if (showArchived ? !archived : archived) return false;
+      const q = search.toLowerCase();
+      return c.phone.toLowerCase().includes(q) ||
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        c.lastMessage.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      const pinA = chatPrefs[a.phone]?.pinned ? 1 : 0;
+      const pinB = chatPrefs[b.phone]?.pinned ? 1 : 0;
+      if (pinA !== pinB) return pinB - pinA;
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+
+  const clearOrDeleteChat = async (phone: string, mode: 'clear' | 'delete') => {
+    if (!connectedPhone) return;
+    try {
+      await api.delete(`/whatsapp/chats/${phone}`, { params: { phone: connectedPhone } });
+      setChats((list) => list.filter((chat) => chat.phone !== phone));
+      if (selectedContact === phone) {
+        setMessages([]);
+        if (mode === 'delete') {
+          setSelectedContact(null);
+          setSelectedContactName(null);
+          setSelectedContactPic(null);
+        }
+      }
+      const next = { ...chatPrefs };
+      delete next[phone];
+      savePrefs(next);
+      toast.success(mode === 'delete' ? 'Chat deleted' : 'Chat cleared');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Could not update this chat');
+    } finally {
+      setConfirmAction(null);
+      setMenuPhone(null);
+    }
+  };
 
   // Group Messages by Date for Date Header Pills (TODAY, YESTERDAY, 15 SEPT 2026)
   const groupedMessages: { dateHeader: string; msgs: Message[] }[] = [];
@@ -356,10 +477,8 @@ export default function BaileysChatsPage() {
     groupedMessages.push({ dateHeader: currentHeader, msgs: currentGroup });
   }
 
-  if (loadingChats) return <div className="flex items-center justify-center h-full">Loading WhatsApp Web...</div>;
-
   return (
-    <div className="h-[calc(100vh-6rem)] md:h-[calc(100vh-7rem)] w-full max-w-6xl mx-auto flex bg-[#f0f2f5] border rounded-2xl shadow-lg overflow-hidden relative font-sans">
+    <div className="h-full w-full flex bg-[#efeae2] overflow-hidden relative font-sans">
       {/* LEFT CHATS SIDEBAR (WHATSAPP WEB EXACT UI) */}
       <div
         className={`w-full md:w-80 lg:w-96 border-r border-[#e9edef] flex flex-col h-full bg-white shrink-0 ${
@@ -433,8 +552,32 @@ export default function BaileysChatsPage() {
         </div>
 
         {/* CHATS SCROLLABLE LIST */}
+        {!showArchived && archivedCount > 0 && (
+          <button
+            onClick={() => setShowArchived(true)}
+            className="w-full px-4 py-3 flex items-center gap-3 text-sm text-[#111b21] hover:bg-[#f5f6f6] border-b border-[#f0f2f5]"
+          >
+            <Archive size={18} className="text-[#54656f]" />
+            Archived
+            <span className="ml-auto text-xs text-[#667781]">{archivedCount}</span>
+          </button>
+        )}
+        {showArchived && (
+          <button
+            onClick={() => setShowArchived(false)}
+            className="w-full px-4 py-3 flex items-center gap-3 text-sm text-[#00a884] hover:bg-[#f5f6f6] border-b border-[#f0f2f5]"
+          >
+            <ArrowLeft size={18} />
+            Back to chats
+          </button>
+        )}
+
         <div className="flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
-          {!connectedPhone ? (
+          {loadingChats ? (
+            <div className="p-8 flex justify-center text-[#00a884]">
+              <Loader2 size={22} className="animate-spin" />
+            </div>
+          ) : !connectedPhone ? (
             <div className="p-8 text-center text-[#54656f] text-xs">
               <p className="font-semibold text-gray-700">Connect a WhatsApp number</p>
               <p className="mt-1">Chats appear here only for the WhatsApp account that is connected.</p>
@@ -456,12 +599,14 @@ export default function BaileysChatsPage() {
             filteredChats.map((c) => {
               const isSelected = selectedContact === c.phone;
               const hasPushName = c.name && c.name !== `+${c.phone}`;
+              const pref = chatPrefs[c.phone] || {};
+              const label = hasPushName ? c.name! : `+${c.phone}`;
 
               return (
                 <div
                   key={c.phone}
                   onClick={() => handleSelectContact(c.phone, c.name, c.profilePicUrl)}
-                  className={`px-4 py-3 flex items-center space-x-3 cursor-pointer transition-all ${
+                  className={`relative px-4 py-3 flex items-center space-x-3 cursor-pointer transition-all group ${
                     isSelected ? 'bg-[#f0f2f5]' : 'hover:bg-[#f5f6f6]'
                   }`}
                 >
@@ -491,10 +636,39 @@ export default function BaileysChatsPage() {
                       <p className="text-[10px] text-[#667781] font-mono">+{c.phone}</p>
                     )}
 
-                    <p className="text-xs text-[#667781] truncate mt-0.5 font-normal">
-                      {c.lastMessage}
+                    <p className="text-xs text-[#667781] truncate mt-0.5 font-normal flex items-center gap-1">
+                      {pref.pinned && <Pin size={12} className="text-[#54656f] shrink-0" />}
+                      {pref.muted && <BellOff size={12} className="text-[#54656f] shrink-0" />}
+                      {pref.unread && <span className="w-2 h-2 rounded-full bg-[#00a884] shrink-0" />}
+                      <span className="truncate">{c.lastMessage}</span>
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    title="Chat actions"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuPhone(menuPhone === c.phone ? null : c.phone);
+                    }}
+                    className={`absolute right-2 top-2 p-1 rounded-full text-[#54656f] hover:bg-[#e9edef] ${
+                      menuPhone === c.phone ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
+                    <ChevronDown size={18} />
+                  </button>
+                  {menuPhone === c.phone && (
+                    <div
+                      className="absolute right-2 top-10 z-30 w-52 bg-white rounded-lg shadow-xl border border-[#e9edef] py-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(c.phone, 'archived')}><Archive size={15} /> {pref.archived ? 'Unarchive chat' : 'Archive chat'}</button>
+                      <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(c.phone, 'muted')}><BellOff size={15} /> {pref.muted ? 'Unmute' : 'Mute notifications'}</button>
+                      <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(c.phone, 'pinned')}><Pin size={15} /> {pref.pinned ? 'Unpin chat' : 'Pin chat'}</button>
+                      <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(c.phone, 'unread')}><Mail size={15} /> {pref.unread ? 'Mark as read' : 'Mark as unread'}</button>
+                      <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => { setConfirmAction({ phone: c.phone, name: label, mode: 'clear' }); setMenuPhone(null); }}><Eraser size={15} /> Clear chat</button>
+                      <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] text-red-600 flex items-center gap-2" onClick={() => { setConfirmAction({ phone: c.phone, name: label, mode: 'delete' }); setMenuPhone(null); }}><Trash2 size={15} /> Delete chat</button>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -544,7 +718,7 @@ export default function BaileysChatsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center space-x-1 shrink-0">
+              <div className="flex items-center space-x-1 shrink-0 relative">
                 <button
                   onClick={() => {
                     if (connectedPhone) fetchChatMessages(selectedContact, connectedPhone, true);
@@ -555,11 +729,32 @@ export default function BaileysChatsPage() {
                 >
                   <RefreshCw size={18} />
                 </button>
+                <button
+                  type="button"
+                  title="Chat actions"
+                  onClick={() => { setHeaderMenu((open) => !open); setMenuPhone(null); }}
+                  className="p-2 text-[#54656f] hover:bg-[#e9edef] rounded-full transition-colors"
+                >
+                  <ChevronDown size={18} />
+                </button>
+                {headerMenu && (
+                  <div className="absolute right-0 top-11 z-30 w-52 bg-white rounded-lg shadow-xl border border-[#e9edef] py-1">
+                    <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(selectedContact, 'archived')}><Archive size={15} /> {chatPrefs[selectedContact]?.archived ? 'Unarchive chat' : 'Archive chat'}</button>
+                    <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(selectedContact, 'muted')}><BellOff size={15} /> {chatPrefs[selectedContact]?.muted ? 'Unmute' : 'Mute notifications'}</button>
+                    <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => togglePref(selectedContact, 'pinned')}><Pin size={15} /> {chatPrefs[selectedContact]?.pinned ? 'Unpin chat' : 'Pin chat'}</button>
+                    <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2" onClick={() => { setConfirmAction({ phone: selectedContact, name: selectedContactName || `+${selectedContact}`, mode: 'clear' }); setHeaderMenu(false); }}><Eraser size={15} /> Clear chat</button>
+                    <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] text-red-600 flex items-center gap-2" onClick={() => { setConfirmAction({ phone: selectedContact, name: selectedContactName || `+${selectedContact}`, mode: 'delete' }); setHeaderMenu(false); }}><Trash2 size={15} /> Delete chat</button>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* MESSAGES THREAD WALL WITH WHATSAPP PATTERN */}
-            <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 bg-[#efeae2] bg-[radial-gradient(#d1c7bd_1px,transparent_1px)] [background-size:16px_16px]">
+            <div
+              ref={threadRef}
+              onScroll={onThreadScroll}
+              className="flex-1 p-4 md:p-6 overflow-y-auto space-y-1 bg-[#efeae2] bg-[radial-gradient(#d1d7db_0.6px,transparent_0.6px)] [background-size:22px_22px]"
+            >
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full text-xs text-[#667781] space-x-2">
                   <Loader2 size={18} className="animate-spin text-[#00a884]" />
@@ -599,12 +794,6 @@ export default function BaileysChatsPage() {
                             }`}
                           >
                             {/* Sender Push Name for Received Messages */}
-                            {!isMe && (m.senderName || selectedContactName) && (
-                              <p className="text-[11px] font-bold text-[#00a884] mb-0.5">
-                                {m.senderName || selectedContactName}
-                              </p>
-                            )}
-
                             {!m.mediaUrl && m.mediaType && (
                               <p className="text-xs text-[#667781] italic">
                                 {m.mediaType === 'image' ? 'Photo' : m.mediaType === 'video' ? 'Video' : m.mediaType === 'audio' ? 'Voice message' : 'Document'}
@@ -615,7 +804,12 @@ export default function BaileysChatsPage() {
                             {m.mediaUrl && (
                               <div className="rounded-lg overflow-hidden mb-1 border border-black/10">
                                 {m.mediaType === 'image' || m.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
-                                  <img src={resolveMediaUrl(m.mediaUrl)} alt="Attachment" className="max-h-60 w-full object-cover" />
+                                  <img
+                                    src={resolveMediaUrl(m.mediaUrl)}
+                                    alt="Attachment"
+                                    className="max-h-60 w-full object-cover cursor-pointer"
+                                    onClick={() => setPreviewImage(resolveMediaUrl(m.mediaUrl))}
+                                  />
                                 ) : m.mediaType === 'video' || m.mediaUrl.match(/\.(mp4|webm|mov)/i) ? (
                                   <video src={resolveMediaUrl(m.mediaUrl)} controls className="max-h-60 w-full" />
                                 ) : m.mediaType === 'audio' || m.mediaUrl.match(/\.(ogg|mp3|m4a|wav|opus)/i) ? (
@@ -636,7 +830,7 @@ export default function BaileysChatsPage() {
 
                             {m.message && (
                               <p className="whitespace-pre-wrap break-words leading-relaxed text-[#111b21]">
-                                {m.message}
+                                {linkify(m.message)}
                               </p>
                             )}
 
@@ -664,7 +858,11 @@ export default function BaileysChatsPage() {
             {mediaFile && (
               <div className="px-4 py-2 bg-[#f0f2f5] border-t border-[#e9edef] flex items-center justify-between shrink-0">
                 <div className="flex items-center space-x-2 text-xs font-semibold text-[#111b21] truncate">
-                  <ImageIcon size={16} className="text-[#00a884] shrink-0" />
+                  {mediaPreview ? (
+                    <img src={mediaPreview} alt="" className="w-10 h-10 rounded object-cover" />
+                  ) : (
+                    <ImageIcon size={16} className="text-[#00a884] shrink-0" />
+                  )}
                   <span className="truncate">{mediaFile.name}</span>
                 </div>
                 <button onClick={removeMedia} className="p-1 text-red-500 hover:bg-red-50 rounded-lg shrink-0">
@@ -674,13 +872,43 @@ export default function BaileysChatsPage() {
             )}
 
             {/* BOTTOM MESSAGE COMPOSER BAR (WHATSAPP WEB EXACT STYLE) */}
-            <div className="p-2.5 bg-[#f0f2f5] border-t border-[#e9edef] shrink-0">
-              <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+            <div className="p-2 bg-[#f0f2f5] shrink-0 relative">
+              {showEmoji && (
+                <div className="absolute bottom-16 left-2 z-20 bg-white border border-[#e9edef] rounded-xl shadow-lg p-2 grid grid-cols-10 gap-1 w-[280px]">
+                  {emojis.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="text-xl hover:bg-[#f0f2f5] rounded"
+                      onClick={() => setInputMessage((value) => value + emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showAttach && (
+                <div className="absolute bottom-16 left-12 z-20 bg-white border border-[#e9edef] rounded-xl shadow-lg py-1 w-44">
+                  <button type="button" onClick={() => openFilePicker('image/*')} className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2"><ImageIcon size={16} className="text-[#00a884]" /> Photos</button>
+                  <button type="button" onClick={() => openFilePicker('video/*')} className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2"><Video size={16} className="text-[#7f66ff]" /> Videos</button>
+                  <button type="button" onClick={() => openFilePicker('audio/*')} className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2"><Mic size={16} className="text-[#ff7a59]" /> Audio</button>
+                  <button type="button" onClick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip')} className="w-full px-3 py-2 text-left text-sm hover:bg-[#f5f6f6] flex items-center gap-2"><FileText size={16} className="text-[#5157ae]" /> Document</button>
+                </div>
+              )}
+              <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
                 <button
                   type="button"
-                  onClick={() => chatFileInputRef.current?.click()}
+                  onClick={() => { setShowEmoji((open) => !open); setShowAttach(false); }}
                   className="p-2 text-[#54656f] hover:bg-[#e9edef] rounded-full transition-colors shrink-0"
-                  title="Attach Media"
+                  title="Emoji"
+                >
+                  <Smile size={22} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAttach((open) => !open); setShowEmoji(false); }}
+                  className="p-2 text-[#54656f] hover:bg-[#e9edef] rounded-full transition-colors shrink-0"
+                  title="Attach"
                 >
                   <Paperclip size={20} />
                 </button>
@@ -690,15 +918,20 @@ export default function BaileysChatsPage() {
                   ref={chatFileInputRef}
                   onChange={handleFileChange}
                   className="hidden"
-                  accept="image/*,video/*,audio/*,application/*"
                 />
 
-                <input
-                  type="text"
+                <textarea
+                  rows={1}
                   placeholder="Type a message"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  className="flex-1 px-4 py-2.5 bg-white rounded-lg text-xs md:text-sm text-[#111b21] placeholder-[#54656f] focus:outline-none shadow-sm min-w-0 border-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-white rounded-lg text-sm text-[#111b21] placeholder-[#54656f] focus:outline-none shadow-sm min-w-0 border-none resize-none max-h-28"
                 />
 
                 <button
@@ -725,6 +958,38 @@ export default function BaileysChatsPage() {
           </div>
         )}
       </div>
+
+      {confirmAction && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="text-lg font-bold text-[#111b21]">
+              {confirmAction.mode === 'delete' ? 'Delete chat?' : 'Clear this chat?'}
+            </h3>
+            <p className="text-sm text-[#667781]">
+              {confirmAction.mode === 'delete'
+                ? `Delete the chat with ${confirmAction.name}? Messages on this account will be removed.`
+                : `Clear messages with ${confirmAction.name}? This only removes them from your account.`}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmAction(null)} className="px-4 py-2 text-sm text-[#54656f] hover:bg-[#f0f2f5] rounded-lg">Cancel</button>
+              <button
+                type="button"
+                onClick={() => clearOrDeleteChat(confirmAction.phone, confirmAction.mode)}
+                className={`px-4 py-2 text-sm text-white rounded-lg ${confirmAction.mode === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#00a884] hover:bg-[#008f6f]'}`}
+              >
+                {confirmAction.mode === 'delete' ? 'Delete' : 'Clear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+          <button className="absolute top-4 right-4 text-white" onClick={() => setPreviewImage(null)}><X size={28} /></button>
+          <img src={previewImage} alt="Preview" className="max-h-[85vh] max-w-full rounded-lg" />
+        </div>
+      )}
 
       {/* NEW CHAT MODAL */}
       {showNewChatModal && (

@@ -26,6 +26,7 @@ export default function RootLayout({
   }, [init]);
 
   const isAuthPage = ['/login', '/register', '/forgot-password'].includes(pathname);
+  const isChatPage = pathname === '/chats';
 
   useEffect(() => {
     if (initialized && !user && !isAuthPage) {
@@ -51,7 +52,7 @@ export default function RootLayout({
             />
             <div className="flex-1 flex flex-col h-screen overflow-hidden w-full">
               <Header onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)} />
-              <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50/50">
+              <main className={isChatPage ? 'flex-1 overflow-hidden bg-[#efeae2]' : 'flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50/50'}>
                 {children}
               </main>
             </div>

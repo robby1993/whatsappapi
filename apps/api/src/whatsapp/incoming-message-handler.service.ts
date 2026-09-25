@@ -7,6 +7,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import pino from 'pino';
 import { ChatFlow } from '../database/models/ChatFlow';
+import { Session } from '../database/models/Session';
 import { ChatSession } from '../database/models/ChatSession';
 import { User } from '../database/models/User';
 import { MessageLog } from '../database/models/MessageLog';
@@ -22,6 +23,8 @@ export class IncomingMessageHandler {
   constructor(
     @InjectModel(ChatFlow)
     private chatFlowModel: typeof ChatFlow,
+    @InjectModel(Session)
+    private sessionModel: typeof Session,
     @InjectModel(ChatSession)
     private chatSessionModel: typeof ChatSession,
     @InjectModel(User)
@@ -327,10 +330,22 @@ export class IncomingMessageHandler {
     }
   }
 
+  private async ownerNumber(botPhone: string): Promise<string> {
+    const session = await this.sessionModel.findOne({
+      where: { phone: botPhone, dataType: 'creds', dataId: 'base' },
+      attributes: ['userNumber'],
+    });
+    return String(session?.userNumber || '').replace(/\D/g, '');
+  }
+
   private async findMatchingFlow(botPhone: string, text: string): Promise<ChatFlow | null> {
+    const userNumber = await this.ownerNumber(botPhone);
+    if (!userNumber) return null;
+
     const flows = await this.chatFlowModel.findAll({
       where: {
         isActive: true,
+        userNumber,
         [Op.or]: [{ botPhone: botPhone }, { botPhone: null }]
       }
     });
@@ -339,9 +354,13 @@ export class IncomingMessageHandler {
   }
 
   private async handleFallback(botPhone: string, sock: any, senderJid: string, text: string) {
+    const userNumber = await this.ownerNumber(botPhone);
+    if (!userNumber) return;
+
     const fallbackFlow = await this.chatFlowModel.findOne({
       where: {
         isActive: true,
+        userNumber,
         [Op.or]: [{ botPhone: botPhone }, { botPhone: null }],
         name: { [Op.iLike]: '%fallback%' }
       }
